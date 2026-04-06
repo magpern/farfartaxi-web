@@ -222,6 +222,737 @@ input {
   font-size: 0.9rem;
 }
 
+/* --- Dashboard (map-first booking) --- */
+.dashboard-shell {
+  min-height: 100vh;
+  background: #000;
+  color: #f9fafb;
+}
+
+.toast-floating {
+  position: fixed;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  max-width: min(90vw, 420px);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+
+.toast-floating-visible {
+  opacity: 1;
+}
+
+.booking-topbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background: #000;
+  border-bottom: 1px solid #1f2937;
+  position: sticky;
+  top: 0;
+  z-index: 2000;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: #f9fafb;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+}
+
+.brand {
+  flex: 1;
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+}
+
+.topbar-user {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 2500;
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(300px, 88vw);
+  background: #0a0a0a;
+  border-right: 1px solid #27272a;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  animation: drawer-in 0.18s ease-out;
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.drawer-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.drawer-close {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.drawer-sub {
+  margin: 0 0 0.75rem;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.drawer-link {
+  display: block;
+  padding: 0.65rem 0.5rem;
+  color: #f1f5f9;
+  text-decoration: none;
+  border-radius: 8px;
+}
+
+.drawer-link:hover {
+  background: #18181b;
+}
+
+.drawer-link-book {
+  font-weight: 600;
+  border: 1px solid #3f3f46;
+}
+
+.drawer-link-btn {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  margin-top: 1rem;
+  color: #f87171;
+}
+
+.drawer-lang-label {
+  margin: 1rem 0 0.35rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #64748b;
+}
+
+.drawer-lang-row {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.drawer-lang-btn {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  padding: 0.5rem 0.4rem;
+  font: inherit;
+  color: #f1f5f9;
+  text-decoration: none;
+  background: #18181b;
+}
+
+.drawer-lang-btn-active {
+  border-color: #fafafa;
+  background: #27272a;
+  font-weight: 600;
+}
+
+.booking-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 52px);
+}
+
+.map-hero {
+  position: relative;
+  flex: 1;
+  min-height: 42vh;
+  max-height: 52vh;
+}
+
+.map-hero-map {
+  min-height: 42vh;
+  height: 100%;
+  width: 100%;
+}
+
+.map-hero .leaflet-container {
+  height: 100%;
+  background: #0f172a;
+}
+
+.booking-sheet {
+  background: #000;
+  border-radius: 20px 20px 0 0;
+  margin-top: -12px;
+  padding: 1.1rem 1rem 1.5rem;
+  position: relative;
+  z-index: 5;
+  border-top: 1px solid #27272a;
+}
+
+.sheet-title {
+  margin: 0 0 1rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.address-flow {
+  display: flex;
+  gap: 0.65rem;
+}
+
+.address-line {
+  width: 12px;
+  flex-shrink: 0;
+  margin-top: 0.6rem;
+  background: linear-gradient(#fff 0, #fff 12px, transparent 12px),
+    linear-gradient(90deg, transparent 5px, #52525b 5px, #52525b 7px, transparent 7px);
+  background-size: 100% 24px, 100% 100%;
+  background-repeat: no-repeat, repeat-y;
+  background-position: 0 0, center center;
+  border-radius: 2px;
+  min-height: 4.5rem;
+}
+
+.address-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field-wrap {
+  position: relative;
+}
+
+.sheet-input {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #3f3f46;
+  padding: 0.75rem 2.25rem 0.75rem 0.85rem;
+  background: #18181b;
+  color: #fafafa;
+  font-size: 0.95rem;
+}
+
+.field-clear {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: #71717a;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.2rem;
+}
+
+.sheet-search {
+  margin-top: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.dist-hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.85rem;
+  color: #71717a;
+}
+
+.booking-actions {
+  display: flex;
+  gap: 0.65rem;
+  margin-top: 1.1rem;
+}
+
+.btn-outline {
+  flex: 1;
+  background: transparent;
+  border: 1px solid #fafafa;
+  color: #fafafa;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-aka-nu {
+  flex: 1.2;
+  background: #fafafa;
+  border: none;
+  color: #000;
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Pre-book calendar */
+.prebook-screen {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 1rem 1rem 2rem;
+  min-height: 100vh;
+  background: #000;
+}
+
+.prebook-header {
+  margin-bottom: 1rem;
+}
+
+.link-back {
+  background: none;
+  border: none;
+  color: #eab308;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 0.5rem;
+}
+
+a.link-back {
+  text-decoration: none;
+  display: inline-block;
+}
+
+.prebook-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.prebook-sub {
+  margin: 0.35rem 0 0;
+  color: #71717a;
+  font-size: 0.95rem;
+}
+
+.prebook-bigdate {
+  font-size: 1.35rem;
+  color: #a1a1aa;
+  margin: 0.5rem 0 1rem;
+}
+
+.calendar-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.calendar-month {
+  color: #eab308;
+  font-weight: 600;
+}
+
+.calendar-arrows {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.calendar-arrows button {
+  background: none;
+  border: none;
+  color: #eab308;
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+}
+
+.calendar-grid-head {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 0.75rem;
+  color: #71717a;
+  margin-bottom: 0.35rem;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.cal-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: none;
+  background: none;
+  color: #fafafa;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.cal-cell.empty {
+  pointer-events: none;
+}
+
+.cal-cell.day:hover {
+  background: #27272a;
+}
+
+.cal-cell.day.selected {
+  background: #fafafa;
+  color: #000;
+  font-weight: 700;
+}
+
+.time-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  color: #fafafa;
+}
+
+.time-pill {
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  padding: 0.5rem 1rem;
+  background: #18181b;
+  color: #fafafa;
+  font-size: 1rem;
+}
+
+/* Native <input type="time"> often shows AM/PM per OS; custom 24h selects avoid that. */
+.time-24h-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  border-radius: 999px;
+  border: 1px solid #3f3f46;
+  padding: 0.35rem 0.65rem;
+  background: #18181b;
+  color: #fafafa;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.time-sep {
+  opacity: 0.85;
+  user-select: none;
+  padding: 0 0.1rem;
+}
+
+.time-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  font-size: 1rem;
+  padding: 0.2rem 1.35rem 0.2rem 0.45rem;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%2394a3b8' d='M0 0h10L5 6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.2rem center;
+  max-width: 4.2rem;
+}
+
+.time-select:focus {
+  outline: none;
+}
+
+.time-select:focus-visible {
+  outline: 2px solid #fafafa;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.time-24h-pill-trigger {
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+
+.time-24h-pill-trigger:focus-visible {
+  outline: 2px solid #fafafa;
+  outline-offset: 3px;
+}
+
+/* Material-style 24h clock dialog */
+.mtp-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.mtp-sheet {
+  width: min(100%, 360px);
+  background: #1e1e1e;
+  border-radius: 20px;
+  padding: 1rem 1rem 0.5rem;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
+}
+
+.mtp-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #a1a1aa;
+  text-align: center;
+}
+
+.mtp-digital {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  margin-bottom: 0.75rem;
+}
+
+.mtp-digital-seg {
+  border: none;
+  background: #3f3f46;
+  color: #fafafa;
+  font-size: 2.75rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 0.35rem 0.55rem;
+  border-radius: 10px;
+  min-width: 3.1rem;
+  cursor: pointer;
+}
+
+.mtp-digital-seg.mtp-digital-active {
+  background: #c9a227;
+  color: #1a1a1a;
+}
+
+.mtp-digital-colon {
+  font-size: 2.75rem;
+  font-weight: 400;
+  color: #fafafa;
+  opacity: 0.9;
+}
+
+.mtp-clock {
+  display: block;
+  width: 100%;
+  max-height: min(62vw, 280px);
+  margin: 0 auto 0.5rem;
+  touch-action: none;
+  user-select: none;
+}
+
+.mtp-clock-face {
+  fill: #2a2a2a;
+}
+
+.mtp-hour-bubble {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.mtp-hour-bubble-active {
+  fill: #c9a227;
+}
+
+.mtp-hour-text {
+  fill: #fafafa;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.mtp-hour-text-active {
+  fill: #141414;
+  font-weight: 700;
+}
+
+.mtp-minute-tick {
+  fill: #a1a1aa;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.mtp-minute-tick-active {
+  fill: #c9a227;
+  font-weight: 700;
+}
+
+.mtp-hand {
+  stroke: #fafafa;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.mtp-center-cap {
+  fill: #c9a227;
+  pointer-events: none;
+}
+
+.mtp-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0 0.25rem;
+  border-top: 1px solid #333;
+  margin-top: 0.25rem;
+}
+
+.mtp-keyboard-toggle {
+  background: none;
+  border: none;
+  color: #a1a1aa;
+  padding: 0.5rem;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.mtp-keyboard-toggle:hover {
+  color: #fafafa;
+  background: #2a2a2a;
+}
+
+.mtp-toolbar-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.mtp-text-btn {
+  background: none;
+  border: none;
+  color: #c9a227;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.65rem 0.85rem;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.mtp-text-btn:hover {
+  background: rgba(201, 162, 39, 0.12);
+}
+
+.mtp-text-btn-primary {
+  color: #f5e6a8;
+}
+
+.mtp-keyboard {
+  display: grid;
+  gap: 1rem;
+  padding: 0.5rem 0 1rem;
+}
+
+.mtp-kbd-label {
+  display: grid;
+  gap: 0.35rem;
+  color: #a1a1aa;
+  font-size: 0.85rem;
+}
+
+.mtp-kbd-input {
+  border-radius: 10px;
+  border: 1px solid #3f3f46;
+  background: #18181b;
+  color: #fafafa;
+  padding: 0.65rem 0.75rem;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn-fortsatt {
+  width: 100%;
+  background: #fafafa;
+  color: #000;
+  border: none;
+  border-radius: 14px;
+  padding: 1rem;
+  font-weight: 800;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+/* Confirmation */
+.confirm-screen {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+  min-height: 100vh;
+  background: #000;
+  text-align: center;
+}
+
+.confirm-title {
+  font-size: 1.4rem;
+  margin-bottom: 1.25rem;
+}
+
+.confirm-card {
+  background: #18181b;
+  border-radius: 14px;
+  padding: 1rem;
+  text-align: left;
+  margin-bottom: 1.5rem;
+  border: 1px solid #27272a;
+}
+
+.subpage-wrap {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1rem 1rem 2rem;
+}
+
 @media (max-width: 640px) {
   .page {
     padding: 0.7rem;

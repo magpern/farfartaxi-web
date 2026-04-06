@@ -1,0 +1,151 @@
+{
+  "common": {
+    "brand": "Farfartaxi",
+    "ok": "OK",
+    "documentTitle": "Farfartaxi"
+  },
+  "landing": {
+    "subtitle": "Book the family’s safest taxi. Simple, fast, and mobile-friendly.",
+    "cta": "Get started"
+  },
+  "auth": {
+    "loginTitle": "Log in",
+    "registerTitle": "Create account",
+    "forgotTitle": "Forgot password",
+    "email": "Email",
+    "password": "Password",
+    "name": "Name",
+    "waiting": "Please wait…",
+    "sendResetLink": "Send reset link",
+    "continue": "Continue",
+    "linkLogin": "Log in",
+    "linkRegister": "Create account",
+    "linkForgot": "Forgot password"
+  },
+  "menu": {
+    "ariaMain": "Main menu",
+    "close": "Close",
+    "book": "Book a trip",
+    "myRides": "My trips",
+    "help": "Help",
+    "driver": "Driver",
+    "admin": "Admin",
+    "logout": "Log out",
+    "language": "Language"
+  },
+  "topbar": {
+    "menuAria": "Menu"
+  },
+  "booking": {
+    "planTrip": "Plan your trip",
+    "pickupPlaceholder": "Where should we pick you up?",
+    "pickupAria": "Pickup address",
+    "clearPickup": "Clear pickup",
+    "destinationPlaceholder": "Add destination",
+    "destinationAria": "Destination",
+    "clearDestination": "Clear destination",
+    "distanceKm": "Estimated straight-line distance: {{km}} km",
+    "forboka": "Pre-book",
+    "akaNu": "Go now",
+    "fillBoth": "Enter both pickup and destination."
+  },
+  "prebook": {
+    "back": "Back",
+    "title": "Pre-book",
+    "subtitle": "When should the taxi pick you up?",
+    "prevMonthAria": "Previous month",
+    "nextMonthAria": "Next month",
+    "time": "Time",
+    "hourAria": "Hour (00–23)",
+    "minuteAria": "Minute (00–59)",
+    "timePickerTitle": "Enter time",
+    "timePickerCancel": "Cancel",
+    "timePickerKeyboard": "Type time with keyboard",
+    "timePickerHourField": "Hour",
+    "timePickerMinuteField": "Minute",
+    "timePickerOpen": "Open time picker",
+    "continue": "Continue",
+    "weekdayLetters": ["M", "T", "W", "T", "F", "S", "S"],
+    "missingAddresses": "Addresses missing.",
+    "futureTime": "Choose a time in the future."
+  },
+  "confirm": {
+    "title": "Trip booked!",
+    "from": "From:",
+    "to": "To:",
+    "time": "Time:",
+    "rideId": "Trip ID:"
+  },
+  "rides": {
+    "backToBooking": "Back to booking",
+    "upcoming": "Upcoming trips",
+    "noUpcoming": "No upcoming trips yet.",
+    "history": "History",
+    "noHistory": "No history yet.",
+    "toWord": "to",
+    "eta": "ETA: ~{{min}} min",
+    "cancel": "Cancel",
+    "delete": "Remove",
+    "shareTrip": "Share trip",
+    "thanksStars": "Thanks + 5★",
+    "cancelledToast": "Trip cancelled.",
+    "deletedToast": "Trip removed from your list.",
+    "shareCopiedToast": "Share link copied.",
+    "feedbackThanksToast": "Thanks for your feedback!",
+    "cancelReason": "User cancelled",
+    "feedbackComment": "Best grandpa!"
+  },
+  "driver": {
+    "panel": "Driver panel",
+    "refresh": "Refresh",
+    "enablePush": "Enable push",
+    "stats": "Stats: {{completed}} completed / {{accepted}} accepted",
+    "openRides": "Open trips",
+    "noOpenRides": "No open trips right now.",
+    "accept": "Accept",
+    "refuse": "Decline",
+    "startDriving": "Start driving",
+    "complete": "Done",
+    "toastAccepted": "You accepted the trip.",
+    "toastRefused": "Trip declined.",
+    "toastStartDriving": "Driving mode enabled.",
+    "toastComplete": "Trip completed.",
+    "refuseComment": "Unavailable right now",
+    "pushNotSupported": "Push is not supported in this browser.",
+    "pushDenied": "Push permission denied.",
+    "pushMissingKey": "VAPID public key missing in backend configuration.",
+    "pushEnabled": "Push enabled."
+  },
+  "admin": {
+    "users": "Users",
+    "promote": "Promote to driver",
+    "demote": "Demote to user",
+    "forcePassword": "Force password change",
+    "deleteRideTitle": "Delete trip (admin)",
+    "rideIdPlaceholder": "Trip ID",
+    "deleteRideBtn": "Delete future/historical trip",
+    "toastPromoted": "User promoted to driver.",
+    "toastDemoted": "Driver demoted to user.",
+    "toastForcePw": "Password change required set.",
+    "toastRideDeleted": "Trip deleted."
+  },
+  "help": {
+    "title": "Help & FAQ",
+    "items": [
+      "Install the app via “Add to Home Screen”.",
+      "Allow notifications for booking updates.",
+      "Drivers should keep the app open for better live ETA via GPS.",
+      "Use “Share trip” to share ETA with family."
+    ],
+    "footer": "Farfartaxi is family-friendly, fast, and fun to use."
+  },
+  "errors": {
+    "generic": "Something went wrong",
+    "bookingFuture": "Choose a date and time in the future.",
+    "bookingFailed": "Could not book: {{message}}"
+  },
+  "languages": {
+    "sv": "Svenska",
+    "en": "English"
+  }
+}

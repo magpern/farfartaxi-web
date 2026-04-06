@@ -1,0 +1,151 @@
+{
+  "common": {
+    "brand": "Farfartaxi",
+    "ok": "OK",
+    "documentTitle": "Farfartaxi"
+  },
+  "landing": {
+    "subtitle": "Boka familjens tryggaste taxi. Enkel, snabb och mobilanpassad.",
+    "cta": "Starta"
+  },
+  "auth": {
+    "loginTitle": "Logga in",
+    "registerTitle": "Skapa konto",
+    "forgotTitle": "Glömt lösenord",
+    "email": "E-post",
+    "password": "Lösenord",
+    "name": "Namn",
+    "waiting": "Väntar…",
+    "sendResetLink": "Skicka länk",
+    "continue": "Fortsätt",
+    "linkLogin": "Logga in",
+    "linkRegister": "Skapa konto",
+    "linkForgot": "Glömt lösenord"
+  },
+  "menu": {
+    "ariaMain": "Huvudmeny",
+    "close": "Stäng",
+    "book": "Boka resa",
+    "myRides": "Mina resor",
+    "help": "Hjälp",
+    "driver": "Förare",
+    "admin": "Admin",
+    "logout": "Logga ut",
+    "language": "Språk"
+  },
+  "topbar": {
+    "menuAria": "Meny"
+  },
+  "booking": {
+    "planTrip": "Planera din resa",
+    "pickupPlaceholder": "Var ska vi hämta dig?",
+    "pickupAria": "Startadress",
+    "clearPickup": "Rensa start",
+    "destinationPlaceholder": "Lägg till destination",
+    "destinationAria": "Destination",
+    "clearDestination": "Rensa destination",
+    "distanceKm": "Uppskattad rak distans: {{km}} km",
+    "forboka": "Förboka",
+    "akaNu": "Åka nu",
+    "fillBoth": "Fyll i både start och destination."
+  },
+  "prebook": {
+    "back": "Tillbaka",
+    "title": "Förboka",
+    "subtitle": "När vill du att taxin hämtar dig?",
+    "prevMonthAria": "Föregående månad",
+    "nextMonthAria": "Nästa månad",
+    "time": "Tid",
+    "hourAria": "Timme (00–23)",
+    "minuteAria": "Minut (00–59)",
+    "timePickerTitle": "Ange tid",
+    "timePickerCancel": "Avbryt",
+    "timePickerKeyboard": "Skriv tid med tangentbord",
+    "timePickerHourField": "Timme",
+    "timePickerMinuteField": "Minut",
+    "timePickerOpen": "Öppna tidsväljare",
+    "continue": "Fortsätt",
+    "weekdayLetters": ["M", "T", "O", "T", "F", "L", "S"],
+    "missingAddresses": "Saknar adresser.",
+    "futureTime": "Välj en tid i framtiden."
+  },
+  "confirm": {
+    "title": "Resan är bokad!",
+    "from": "Från:",
+    "to": "Till:",
+    "time": "Tid:",
+    "rideId": "Res-ID:"
+  },
+  "rides": {
+    "backToBooking": "Tillbaka till bokning",
+    "upcoming": "Kommande resor",
+    "noUpcoming": "Inga kommande resor än.",
+    "history": "Historik",
+    "noHistory": "Ingen historik än.",
+    "toWord": "till",
+    "eta": "ETA: ~{{min}} min",
+    "cancel": "Avboka",
+    "delete": "Ta bort",
+    "shareTrip": "Dela resa",
+    "thanksStars": "Tack + 5★",
+    "cancelledToast": "Resan avbokad.",
+    "deletedToast": "Resan borttagen från din lista.",
+    "shareCopiedToast": "Delningslänk kopierad.",
+    "feedbackThanksToast": "Tack för din feedback!",
+    "cancelReason": "Användaren avbokade",
+    "feedbackComment": "Bästa farfar!"
+  },
+  "driver": {
+    "panel": "Förarpanel",
+    "refresh": "Uppdatera",
+    "enablePush": "Aktivera push",
+    "stats": "Statistik: {{completed}} klara / {{accepted}} accepterade",
+    "openRides": "Öppna resor",
+    "noOpenRides": "Inga öppna resor just nu.",
+    "accept": "Acceptera",
+    "refuse": "Neka",
+    "startDriving": "Starta körning",
+    "complete": "Klar",
+    "toastAccepted": "Du accepterade resan.",
+    "toastRefused": "Resa nekad.",
+    "toastStartDriving": "Start körning aktiverad.",
+    "toastComplete": "Resan är klar.",
+    "refuseComment": "Kan ej just nu",
+    "pushNotSupported": "Push stöds inte i den här webbläsaren.",
+    "pushDenied": "Push tillstånd nekades.",
+    "pushMissingKey": "VAPID-nyckel saknas i backend-konfigurationen.",
+    "pushEnabled": "Push aktiverad."
+  },
+  "admin": {
+    "users": "Användare",
+    "promote": "Gör till förare",
+    "demote": "Gör till användare",
+    "forcePassword": "Tvinga lösenordsbyte",
+    "deleteRideTitle": "Ta bort resa (admin)",
+    "rideIdPlaceholder": "Res-ID",
+    "deleteRideBtn": "Ta bort framtida/historisk resa",
+    "toastPromoted": "Användare befordrad till förare.",
+    "toastDemoted": "Förare nedgraderad till användare.",
+    "toastForcePw": "Lösenordsbyte markerat.",
+    "toastRideDeleted": "Resa borttagen."
+  },
+  "help": {
+    "title": "Hjälp och vanliga frågor",
+    "items": [
+      "Installera appen via \"Lägg till på hemskärmen\".",
+      "Tillåt notiser för att få bokningsuppdateringar.",
+      "Förare bör ha appen öppen för bättre live-ETA via GPS.",
+      "Använd \"Dela resa\" för att dela ETA med familjen."
+    ],
+    "footer": "Farfartaxi är familjevänlig, snabb och rolig att använda."
+  },
+  "errors": {
+    "generic": "Något gick fel",
+    "bookingFuture": "Välj ett datum och tid i framtiden.",
+    "bookingFailed": "Kunde inte boka: {{message}}"
+  },
+  "languages": {
+    "sv": "Svenska",
+    "en": "English"
+  }
+}

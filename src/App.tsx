@@ -1,5 +1,18 @@
-import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import {
+  createContext,
+  type Dispatch,
+  type FormEvent,
+  type SetStateAction,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from 'react'
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { useI18n } from './i18n/context'
+import { Clock24hTimePicker } from './Clock24hTimePicker'
 import L from 'leaflet'
 import { registerSW } from 'virtual:pwa-register'
 import 'leaflet/dist/leaflet.css'
@@ -47,6 +60,176 @@ const API_URL = import.meta.env.DEV
   ? ''
   : (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
+/** Nominatim requires a descriptive User-Agent (https://operations.osmfoundation.org/policies/nominatim/). */
+const NOMINATIM_HEADERS: HeadersInit = {
+  Accept: 'application/json',
+  'User-Agent': 'Farfartaxi/1.0 (family taxi booking; https://github.com/magpern/farfartaxi-web)'
+}
+
+type NominatimResult = {
+  display_name: string
+  lat: string
+  lon: string
+  /** POI / place name from Nominatim (shops, stations, etc.). */
+  name?: string
+  class?: string
+  type?: string
+  address?: Record<string, string | undefined>
+}
+
+/** Local area (kommun-level): "Järfälla kommun" → "Järfälla", not län/county (e.g. Stockholm). */
+function stripKommunSuffix(raw: string): string {
+  return raw.replace(/\s+kommun$/i, '').trim()
+}
+
+/** Län/county fallback when no municipality field exists (rural). */
+function formatCountyFallback(raw: string): string {
+  return raw
+    .replace(/\s+County$/i, '')
+    .replace(/\s+län$/i, '')
+    .trim()
+}
+
+/**
+ * Street + locality ("…väg 10, Järfälla") or POI + locality ("ICA Maxi Barkarby, Järfälla").
+ * Uses Nominatim `name` when there is no road (POI / landmark search). Sweden-only on search API.
+ */
+function formatNominatimAddress(payload: NominatimResult | { display_name?: string; address?: Record<string, string | undefined> }): string {
+  const full = payload as NominatimResult
+  const a = payload.address
+  const poiName = (full.name?.trim() || a?.name?.trim() || '').trim()
+
+  const road =
+    a?.road ||
+    a?.pedestrian ||
+    a?.footway ||
+    a?.path ||
+    a?.cycleway ||
+    a?.residential
+  const housenumber = a?.house_number || a?.house_name
+  const streetLine =
+    road && housenumber
+      ? `${road} ${housenumber}`.trim()
+      : road
+        ? road.trim()
+        : housenumber
+          ? housenumber.trim()
+          : ''
+
+  const localityRaw =
+    a?.municipality ||
+    a?.city ||
+    a?.town ||
+    a?.village ||
+    a?.suburb ||
+    a?.neighbourhood ||
+    a?.hamlet
+  let area = localityRaw ? stripKommunSuffix(localityRaw) : ''
+  if (!area && a) {
+    const countyRaw = a.county || a.state || a.region
+    if (countyRaw) area = formatCountyFallback(countyRaw)
+  }
+
+  let lead = streetLine
+  if (poiName) {
+    if (!streetLine) lead = poiName
+    else {
+      const pl = poiName.toLowerCase()
+      const sl = streetLine.toLowerCase()
+      lead = sl.includes(pl) || pl.includes(sl) ? streetLine : `${poiName}, ${streetLine}`
+    }
+  }
+
+  const parts = [lead, area].filter(Boolean)
+  const joined = parts.join(', ')
+  if (joined) return joined
+  if (poiName && !area) return poiName
+  return payload.display_name ?? ''
+}
+
+function formatYmdHm(iso: string) {
+  const d = new Date(iso)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** Lists and booking-related timestamps: always 24-hour clock. */
+function formatLocaleDateTime24h(iso: string, dateLocale: string) {
+  return new Date(iso).toLocaleString(dateLocale, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  })
+}
+
+type BookingDraft = {
+  fromAddress: string
+  fromLat: number
+  fromLon: number
+  toAddress: string
+  toLat: number
+  toLon: number
+}
+
+const defaultDraft: BookingDraft = {
+  fromAddress: '',
+  toAddress: '',
+  fromLat: 59.3293,
+  fromLon: 18.0686,
+  toLat: 59.3346,
+  toLon: 18.0632
+}
+
+const BOOKING_DRAFT_STORAGE_KEY = 'farfartaxi-booking-draft'
+
+function readBookingDraftFromStorage(): BookingDraft | null {
+  if (typeof sessionStorage === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(BOOKING_DRAFT_STORAGE_KEY)
+    if (!raw) return null
+    const o = JSON.parse(raw) as Record<string, unknown>
+    if (typeof o.fromAddress !== 'string' || typeof o.toAddress !== 'string') return null
+    const fromLat = Number(o.fromLat)
+    const fromLon = Number(o.fromLon)
+    const toLat = Number(o.toLat)
+    const toLon = Number(o.toLon)
+    if (![fromLat, fromLon, toLat, toLon].every(Number.isFinite)) return null
+    return {
+      fromAddress: o.fromAddress,
+      toAddress: o.toAddress,
+      fromLat,
+      fromLon,
+      toLat,
+      toLon
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeBookingDraftToStorage(d: BookingDraft) {
+  try {
+    sessionStorage.setItem(BOOKING_DRAFT_STORAGE_KEY, JSON.stringify(d))
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+const BookingDraftContext = createContext<{
+  draft: BookingDraft
+  setDraft: Dispatch<SetStateAction<BookingDraft>>
+  clearBookingDraft: () => void
+} | null>(null)
+
+function useBookingDraft() {
+  const ctx = useContext(BookingDraftContext)
+  if (!ctx) throw new Error('useBookingDraft')
+  return ctx
+}
+
 function App() {
   return (
     <Routes>
@@ -67,13 +250,14 @@ function ProtectedApp() {
 }
 
 function LandingPage() {
+  const { t } = useI18n()
   return (
     <main className="page page-center">
       <section className="card hero-card">
-        <h1>Farfartaxi</h1>
-        <p>Boka familjens tryggaste taxi. Enkel, snabb och mobilanpassad.</p>
+        <h1>{t('common.brand')}</h1>
+        <p>{t('landing.subtitle')}</p>
         <Link className="btn btn-primary" to="/login">
-          Starta
+          {t('landing.cta')}
         </Link>
       </section>
     </main>
@@ -81,6 +265,7 @@ function LandingPage() {
 }
 
 function AuthPage() {
+  const { t } = useI18n()
   const navigate = useNavigate()
   const [auth, setAuth] = useLocalAuth()
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login')
@@ -122,7 +307,7 @@ function AuthPage() {
         })
       }
     } catch (err) {
-      setError(getErrorMessage(err))
+      setError(err instanceof Error ? err.message : t('errors.generic'))
     } finally {
       setPending(false)
     }
@@ -131,33 +316,49 @@ function AuthPage() {
   return (
     <main className="page page-center">
       <section className="card auth-card">
-        <h2>{mode === 'login' ? 'Logga in' : mode === 'register' ? 'Skapa konto' : 'Glomt losenord'}</h2>
+        <h2>
+          {mode === 'login'
+            ? t('auth.loginTitle')
+            : mode === 'register'
+              ? t('auth.registerTitle')
+              : t('auth.forgotTitle')}
+        </h2>
         <form onSubmit={submit} className="stack">
           <label>
-            E-post
+            {t('auth.email')}
             <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required />
           </label>
           {mode !== 'forgot' && (
             <label>
-              Lösenord
+              {t('auth.password')}
               <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required />
             </label>
           )}
           {mode === 'register' && (
             <label>
-              Namn
+              {t('auth.name')}
               <input value={name} onChange={(e) => setName(e.target.value)} required />
             </label>
           )}
           {error && <p className="error">{error}</p>}
           <button className="btn btn-primary" type="submit" disabled={pending}>
-            {pending ? 'Vantar...' : mode === 'forgot' ? 'Skicka länk' : 'Fortsätt'}
+            {pending
+              ? t('auth.waiting')
+              : mode === 'forgot'
+                ? t('auth.sendResetLink')
+                : t('auth.continue')}
           </button>
         </form>
         <div className="auth-links">
-          <button onClick={() => setMode('login')} className="link-btn">Logga in</button>
-          <button onClick={() => setMode('register')} className="link-btn">Skapa konto</button>
-          <button onClick={() => setMode('forgot')} className="link-btn">Glomt losenord</button>
+          <button onClick={() => setMode('login')} className="link-btn">
+            {t('auth.linkLogin')}
+          </button>
+          <button onClick={() => setMode('register')} className="link-btn">
+            {t('auth.linkRegister')}
+          </button>
+          <button onClick={() => setMode('forgot')} className="link-btn">
+            {t('auth.linkForgot')}
+          </button>
         </div>
       </section>
     </main>
@@ -165,83 +366,227 @@ function AuthPage() {
 }
 
 function Dashboard({ auth, setAuth }: { auth: AuthResponse; setAuth: (a: AuthResponse | null) => void }) {
-  const [tab, setTab] = useState('booking')
+  const { t } = useI18n()
   const [toast, setToast] = useState('')
+  const [toastVisible, setToastVisible] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [draft, setDraft] = useState<BookingDraft>(() => readBookingDraftFromStorage() ?? defaultDraft)
+  const location = useLocation()
+  const hideTopBar = location.pathname.includes('/forboka') || location.pathname.includes('/bekraftelse')
 
-  function logout() {
-    setAuth(null)
-  }
+  useEffect(() => {
+    writeBookingDraftToStorage(draft)
+  }, [draft])
+
+  useEffect(() => {
+    if (!toast) {
+      setToastVisible(false)
+      return
+    }
+    setToastVisible(true)
+    const hideId = window.setTimeout(() => setToastVisible(false), 3600)
+    const clearId = window.setTimeout(() => setToast(''), 4000)
+    return () => {
+      window.clearTimeout(hideId)
+      window.clearTimeout(clearId)
+    }
+  }, [toast])
+
+  const clearBookingDraft = useCallback(() => {
+    setDraft(defaultDraft)
+    try {
+      sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const draftContextValue = useMemo(
+    () => ({ draft, setDraft, clearBookingDraft }),
+    [draft, clearBookingDraft]
+  )
 
   return (
-    <main className="page app-shell">
-      <header className="topbar">
-        <div>
-          <strong>Farfartaxi</strong>
-          <p>
-            Hej {auth.user.fullName} ({auth.user.role})
-          </p>
+    <BookingDraftContext.Provider value={draftContextValue}>
+      <div className="dashboard-shell">
+        {toast && (
+          <div className={`toast toast-floating ${toastVisible ? 'toast-floating-visible' : ''}`}>{toast}</div>
+        )}
+        {!hideTopBar && (
+          <header className="booking-topbar">
+            <button type="button" className="icon-btn" onClick={() => setMenuOpen(true)} aria-label={t('topbar.menuAria')}>
+              ☰
+            </button>
+            <span className="brand">{t('common.brand')}</span>
+            <span className="topbar-user" title={auth.user.email}>
+              {auth.user.fullName}
+            </span>
+          </header>
+        )}
+        {/* Paths are relative to parent `/app/*`: remaining URL after `/app` is matched (e.g. `/` → index). */}
+        <Routes>
+          <Route index element={<BookingPage token={auth.token} onToast={setToast} />} />
+          <Route path="forboka" element={<PreBookPage token={auth.token} onToast={setToast} />} />
+          <Route path="bekraftelse" element={<BookingConfirmPage />} />
+          <Route path="resor" element={<MyRidesPage token={auth.token} onToast={setToast} />} />
+          <Route path="hjalp" element={<HelpPage />} />
+          {(auth.user.role === 'DRIVER' || auth.user.role === 'ADMIN') && (
+            <Route path="forare" element={<DriverPage token={auth.token} onToast={setToast} />} />
+          )}
+          {auth.user.role === 'ADMIN' && <Route path="admin" element={<AdminPage token={auth.token} onToast={setToast} />} />}
+          <Route path="*" element={<Navigate to="/app" replace />} />
+        </Routes>
+        {menuOpen && (
+          <SideMenu
+            auth={auth}
+            onClose={() => setMenuOpen(false)}
+            onLogout={() => {
+              try {
+                sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY)
+              } catch {
+                /* ignore */
+              }
+              setAuth(null)
+            }}
+          />
+        )}
+      </div>
+    </BookingDraftContext.Provider>
+  )
+}
+
+function SideMenu({
+  auth,
+  onClose,
+  onLogout
+}: {
+  auth: AuthResponse
+  onClose: () => void
+  onLogout: () => void
+}) {
+  const { t, locale, setLocale } = useI18n()
+  return (
+    <div className="drawer-backdrop" onClick={onClose} role="presentation">
+      <nav className="drawer" onClick={(e) => e.stopPropagation()} aria-label={t('menu.ariaMain')}>
+        <div className="drawer-head">
+          <strong>{t('common.brand')}</strong>
+          <button type="button" className="drawer-close" onClick={onClose} aria-label={t('menu.close')}>
+            ×
+          </button>
         </div>
-        <button onClick={logout} className="btn">Logga ut</button>
-      </header>
-      <nav className="tabs">
-        <button className={tab === 'booking' ? 'active' : ''} onClick={() => setTab('booking')}>Boka</button>
-        <button className={tab === 'rides' ? 'active' : ''} onClick={() => setTab('rides')}>Mina resor</button>
-        <button className={tab === 'help' ? 'active' : ''} onClick={() => setTab('help')}>Hjalp</button>
+        <p className="drawer-sub">{auth.user.fullName}</p>
+        <Link className="drawer-link drawer-link-book" to="/app" onClick={onClose}>
+          {t('menu.book')}
+        </Link>
+        <Link className="drawer-link" to="/app/resor" onClick={onClose}>
+          {t('menu.myRides')}
+        </Link>
+        <Link className="drawer-link" to="/app/hjalp" onClick={onClose}>
+          {t('menu.help')}
+        </Link>
         {(auth.user.role === 'DRIVER' || auth.user.role === 'ADMIN') && (
-          <button className={tab === 'driver' ? 'active' : ''} onClick={() => setTab('driver')}>Forare</button>
+          <Link className="drawer-link" to="/app/forare" onClick={onClose}>
+            {t('menu.driver')}
+          </Link>
         )}
         {auth.user.role === 'ADMIN' && (
-          <button className={tab === 'admin' ? 'active' : ''} onClick={() => setTab('admin')}>Admin</button>
+          <Link className="drawer-link" to="/app/admin" onClick={onClose}>
+            {t('menu.admin')}
+          </Link>
         )}
+        <p className="drawer-lang-label">{t('menu.language')}</p>
+        <div className="drawer-lang-row">
+          <button
+            type="button"
+            className={`drawer-link drawer-lang-btn ${locale === 'sv' ? 'drawer-lang-btn-active' : ''}`}
+            onClick={() => setLocale('sv')}
+          >
+            {t('languages.sv')}
+          </button>
+          <button
+            type="button"
+            className={`drawer-link drawer-lang-btn ${locale === 'en' ? 'drawer-lang-btn-active' : ''}`}
+            onClick={() => setLocale('en')}
+          >
+            {t('languages.en')}
+          </button>
+        </div>
+        <button
+          type="button"
+          className="drawer-link drawer-link-btn"
+          onClick={() => {
+            onLogout()
+            onClose()
+          }}
+        >
+          {t('menu.logout')}
+        </button>
       </nav>
-      {toast && <div className="toast">{toast}</div>}
-      <section className="content">
-        {tab === 'booking' && <BookingPage token={auth.token} onToast={setToast} />}
-        {tab === 'rides' && <MyRidesPage token={auth.token} onToast={setToast} />}
-        {tab === 'help' && <HelpPage />}
-        {tab === 'driver' && <DriverPage token={auth.token} onToast={setToast} />}
-        {tab === 'admin' && auth.user.role === 'ADMIN' && <AdminPage token={auth.token} onToast={setToast} />}
-      </section>
-    </main>
+    </div>
   )
 }
 
 function BookingPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
+  const { t } = useI18n()
+  const navigate = useNavigate()
+  const { draft, setDraft, clearBookingDraft } = useBookingDraft()
   const mapRef = useRef<L.Map | null>(null)
   const mapNode = useRef<HTMLDivElement | null>(null)
+  const activeFieldRef = useRef<'from' | 'to'>('from')
   const [activeField, setActiveField] = useState<'from' | 'to'>('from')
-  const [fromAddress, setFromAddress] = useState('')
-  const [toAddress, setToAddress] = useState('')
-  const [fromLat, setFromLat] = useState(59.3293)
-  const [fromLon, setFromLon] = useState(18.0686)
-  const [toLat, setToLat] = useState(59.3346)
-  const [toLon, setToLon] = useState(18.0632)
-  const [dateTime, setDateTime] = useState(() => new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16))
   const [query, setQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<Array<{ display_name: string; lat: string; lon: string }>>([])
+  const [searchResults, setSearchResults] = useState<NominatimResult[]>([])
 
-  const distanceKm = useMemo(() => haversine(fromLat, fromLon, toLat, toLon), [fromLat, fromLon, toLat, toLon])
+  activeFieldRef.current = activeField
 
+  const distanceKm = useMemo(
+    () => haversine(draft.fromLat, draft.fromLon, draft.toLat, draft.toLon),
+    [draft.fromLat, draft.fromLon, draft.toLat, draft.toLon]
+  )
+
+  // One Leaflet map per BookingPage mount; draft is from this mount (restored via sessionStorage when returning from Förboka).
   useEffect(() => {
     if (!mapNode.current || mapRef.current) return
-    const map = L.map(mapNode.current).setView([fromLat, fromLon], 13)
+    const {
+      fromAddress,
+      toAddress,
+      fromLat: initFromLat,
+      fromLon: initFromLon
+    } = draft
+    const skipFirstMoveEnd = fromAddress.trim().length > 0 && toAddress.trim().length > 0
+    let skipMoveEndPending = skipFirstMoveEnd
+    const map = L.map(mapNode.current).setView([initFromLat, initFromLon], 13)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map)
     map.on('moveend', async () => {
+      if (skipMoveEndPending) {
+        skipMoveEndPending = false
+        return
+      }
       const center = map.getCenter()
+      const field = activeFieldRef.current
       try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${center.lat}&lon=${center.lng}`
-        const data = await fetch(url).then((r) => r.json())
-        const address = data.display_name ?? `${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`
-        if (activeField === 'from') {
-          setFromAddress(address)
-          setFromLat(center.lat)
-          setFromLon(center.lng)
+        const url =
+          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18` +
+          `&lat=${center.lat}&lon=${center.lng}`
+        const data = (await fetch(url, { headers: NOMINATIM_HEADERS }).then((r) => r.json())) as NominatimResult
+        const address =
+          formatNominatimAddress(data) || data.display_name || `${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`
+        if (field === 'from') {
+          setDraft((d) => ({
+            ...d,
+            fromAddress: address,
+            fromLat: center.lat,
+            fromLon: center.lng
+          }))
         } else {
-          setToAddress(address)
-          setToLat(center.lat)
-          setToLon(center.lng)
+          setDraft((d) => ({
+            ...d,
+            toAddress: address,
+            toLat: center.lat,
+            toLon: center.lng
+          }))
         }
       } catch {
         // no-op
@@ -252,7 +597,8 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
       map.remove()
       mapRef.current = null
     }
-  }, [activeField, fromLat, fromLon])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- map init only on mount; do not recreate when draft updates
+  }, [setDraft])
 
   useEffect(() => {
     const id = setTimeout(async () => {
@@ -260,101 +606,359 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
         setSearchResults([])
         return
       }
-      const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(query)}&addressdetails=1&limit=5`
-      const data = await fetch(url).then((r) => r.json())
+      const url =
+        `https://nominatim.openstreetmap.org/search?format=jsonv2` +
+        `&q=${encodeURIComponent(query)}&addressdetails=1&limit=5&countrycodes=se`
+      const data = (await fetch(url, { headers: NOMINATIM_HEADERS }).then((r) => r.json())) as NominatimResult[]
       setSearchResults(data)
     }, 350)
     return () => clearTimeout(id)
   }, [query])
 
-  async function bookRide() {
-    if (!fromAddress || !toAddress) {
-      onToast('Valj bade start och destination.')
+  function applySearchResult(item: NominatimResult) {
+    const lat = Number(item.lat)
+    const lon = Number(item.lon)
+    mapRef.current?.setView([lat, lon], 15)
+    const label = formatNominatimAddress(item) || item.display_name
+    if (activeField === 'from') {
+      setDraft((d) => ({ ...d, fromAddress: label, fromLat: lat, fromLon: lon }))
+    } else {
+      setDraft((d) => ({ ...d, toAddress: label, toLat: lat, toLon: lon }))
+    }
+    setSearchResults([])
+    setQuery('')
+  }
+
+  function goForboka() {
+    if (!draft.fromAddress.trim() || !draft.toAddress.trim()) {
+      onToast(t('booking.fillBoth'))
       return
     }
-    await api('/api/rides', {
-      method: 'POST',
-      token,
-      body: JSON.stringify({
-        fromAddress,
-        fromLat,
-        fromLon,
-        toAddress,
-        toLat,
-        toLon,
-        scheduledAt: new Date(dateTime).toISOString()
+    navigate('/app/forboka')
+  }
+
+  async function bookAkaNu() {
+    if (!draft.fromAddress.trim() || !draft.toAddress.trim()) {
+      onToast(t('booking.fillBoth'))
+      return
+    }
+    const scheduledAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
+    try {
+      const ride = await api<RideResponse>('/api/rides', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({
+          fromAddress: draft.fromAddress,
+          fromLat: draft.fromLat,
+          fromLon: draft.fromLon,
+          toAddress: draft.toAddress,
+          toLat: draft.toLat,
+          toLon: draft.toLon,
+          scheduledAt
+        })
       })
-    })
-    onToast('Resan ar bokad!')
+      clearBookingDraft()
+      navigate('/app/bekraftelse', { state: { ride } })
+    } catch (err) {
+      onToast(bookingApiErrorMessage(err, t))
+    }
   }
 
   return (
-    <div className="stack">
-      <div className="card">
-        <h3>Planera din resa</h3>
-        <label>
-          Fran
-          <input value={fromAddress} onFocus={() => setActiveField('from')} onChange={(e) => setFromAddress(e.target.value)} />
-        </label>
-        <label>
-          Till
-          <input value={toAddress} onFocus={() => setActiveField('to')} onChange={(e) => setToAddress(e.target.value)} />
-        </label>
-        <label>
-          Sok adress
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Skriv och valj..."
-            aria-label="Sok adress"
-          />
-        </label>
-        {searchResults.length > 0 && (
-          <ul className="search-list">
-            {searchResults.map((item) => (
-              <li key={`${item.lat}-${item.lon}`}>
+    <div className="booking-layout">
+      <div className="map-hero">
+        <div className="center-pin" aria-hidden />
+        <div ref={mapNode} className="map map-hero-map" />
+      </div>
+      <div className="booking-sheet">
+        <h2 className="sheet-title">{t('booking.planTrip')}</h2>
+        <div className="address-flow">
+          <div className="address-line" aria-hidden />
+          <div className="address-fields">
+            <div className="field-wrap">
+              <input
+                className="sheet-input"
+                value={draft.fromAddress}
+                placeholder={t('booking.pickupPlaceholder')}
+                aria-label={t('booking.pickupAria')}
+                onFocus={() => {
+                  setActiveField('from')
+                  setQuery(draft.fromAddress)
+                }}
+                onChange={(e) => {
+                  setActiveField('from')
+                  const v = e.target.value
+                  setDraft((d) => ({ ...d, fromAddress: v }))
+                  setQuery(v)
+                }}
+              />
+              {draft.fromAddress && (
                 <button
-                  onClick={() => {
-                    const lat = Number(item.lat)
-                    const lon = Number(item.lon)
-                    mapRef.current?.setView([lat, lon], 15)
-                    if (activeField === 'from') {
-                      setFromAddress(item.display_name)
-                      setFromLat(lat)
-                      setFromLon(lon)
-                    } else {
-                      setToAddress(item.display_name)
-                      setToLat(lat)
-                      setToLon(lon)
-                    }
-                    setSearchResults([])
-                    setQuery('')
-                  }}
+                  type="button"
+                  className="field-clear"
+                  aria-label={t('booking.clearPickup')}
+                  onClick={() => setDraft((d) => ({ ...d, fromAddress: '' }))}
                 >
-                  {item.display_name}
+                  ×
+                </button>
+              )}
+            </div>
+            <div className="field-wrap">
+              <input
+                className="sheet-input"
+                value={draft.toAddress}
+                placeholder={t('booking.destinationPlaceholder')}
+                aria-label={t('booking.destinationAria')}
+                onFocus={() => {
+                  setActiveField('to')
+                  setQuery(draft.toAddress)
+                }}
+                onChange={(e) => {
+                  setActiveField('to')
+                  const v = e.target.value
+                  setDraft((d) => ({ ...d, toAddress: v }))
+                  setQuery(v)
+                }}
+              />
+              {draft.toAddress && (
+                <button
+                  type="button"
+                  className="field-clear"
+                  aria-label={t('booking.clearDestination')}
+                  onClick={() => setDraft((d) => ({ ...d, toAddress: '' }))}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+        {searchResults.length > 0 && query.length >= 3 && (
+          <ul className="search-list sheet-search">
+            {searchResults.map((item) => (
+              <li key={`${item.lat}-${item.lon}-${item.display_name}`}>
+                <button type="button" onClick={() => applySearchResult(item)}>
+                  {formatNominatimAddress(item) || item.display_name}
                 </button>
               </li>
             ))}
           </ul>
         )}
-        <label>
-          Datum och tid
-          <input type="datetime-local" value={dateTime} onChange={(e) => setDateTime(e.target.value)} />
-        </label>
-        <p>Uppskattad rak distans: {distanceKm.toFixed(2)} km</p>
-        <button className="btn btn-primary" onClick={bookRide}>Boka (pre-booking)</button>
-      </div>
-      <div className="map-wrap">
-        <div className="center-pin" aria-hidden />
-        <div ref={mapNode} className="map" />
+        <p className="dist-hint">{t('booking.distanceKm', { km: distanceKm.toFixed(2) })}</p>
+        <div className="booking-actions">
+          <button type="button" className="btn btn-outline" onClick={goForboka}>
+            {t('booking.forboka')}
+          </button>
+          <button type="button" className="btn btn-aka-nu" onClick={bookAkaNu}>
+            {t('booking.akaNu')}
+          </button>
+        </div>
       </div>
     </div>
   )
 }
 
+function PreBookPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
+  const { t, locale, ta } = useI18n()
+  const navigate = useNavigate()
+  const { draft, clearBookingDraft } = useBookingDraft()
+  const [cursor, setCursor] = useState(() => {
+    const d = new Date(Date.now() + 60 * 60 * 1000)
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  })
+  const [pickHour, setPickHour] = useState(() => {
+    const d = new Date(Date.now() + 60 * 60 * 1000)
+    return d.getHours()
+  })
+  const [pickMinute, setPickMinute] = useState(() => {
+    const d = new Date(Date.now() + 60 * 60 * 1000)
+    return d.getMinutes()
+  })
+  const [timePickerOpen, setTimePickerOpen] = useState(false)
+
+  const selectedDay = useMemo(() => cursor.getDate(), [cursor])
+
+  const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
+  const monthLabel = cursor.toLocaleDateString(dateLocale, { month: 'long', year: 'numeric' })
+  const bigLabel = cursor.toLocaleDateString(dateLocale, { day: 'numeric', month: 'short', year: 'numeric' })
+
+  const { daysInMonth, startPad, year, month } = useMemo(() => {
+    const y = cursor.getFullYear()
+    const m = cursor.getMonth()
+    const first = new Date(y, m, 1)
+    const dim = new Date(y, m + 1, 0).getDate()
+    const start = (first.getDay() + 6) % 7
+    return { daysInMonth: dim, startPad: start, year: y, month: m }
+  }, [cursor])
+
+  function prevMonth() {
+    setCursor((c) => new Date(c.getFullYear(), c.getMonth() - 1, 1))
+  }
+
+  function nextMonth() {
+    setCursor((c) => new Date(c.getFullYear(), c.getMonth() + 1, 1))
+  }
+
+  function pickDay(day: number) {
+    setCursor(new Date(year, month, day))
+  }
+
+  async function onFortsatt() {
+    if (!draft.fromAddress.trim() || !draft.toAddress.trim()) {
+      onToast(t('prebook.missingAddresses'))
+      navigate('/app')
+      return
+    }
+    const when = new Date(year, month, selectedDay, pickHour, pickMinute, 0, 0)
+    if (when.getTime() <= Date.now()) {
+      onToast(t('prebook.futureTime'))
+      return
+    }
+    try {
+      const ride = await api<RideResponse>('/api/rides', {
+        method: 'POST',
+        token,
+        body: JSON.stringify({
+          fromAddress: draft.fromAddress,
+          fromLat: draft.fromLat,
+          fromLon: draft.fromLon,
+          toAddress: draft.toAddress,
+          toLat: draft.toLat,
+          toLon: draft.toLon,
+          scheduledAt: when.toISOString()
+        })
+      })
+      clearBookingDraft()
+      navigate('/app/bekraftelse', { state: { ride } })
+    } catch (err) {
+      onToast(bookingApiErrorMessage(err, t))
+    }
+  }
+
+  const sweDays = ta('prebook.weekdayLetters')
+
+  return (
+    <div className="prebook-screen">
+      <header className="prebook-header">
+        <button type="button" className="link-back" onClick={() => navigate('/app')}>
+          {t('prebook.back')}
+        </button>
+        <h1 className="prebook-title">{t('prebook.title')}</h1>
+        <p className="prebook-sub">{t('prebook.subtitle')}</p>
+      </header>
+      <p className="prebook-bigdate">{bigLabel}</p>
+      <div className="calendar-nav">
+        <span className="calendar-month">{monthLabel}</span>
+        <div className="calendar-arrows">
+          <button type="button" onClick={prevMonth} aria-label={t('prebook.prevMonthAria')}>
+            ‹
+          </button>
+          <button type="button" onClick={nextMonth} aria-label={t('prebook.nextMonthAria')}>
+            ›
+          </button>
+        </div>
+      </div>
+      <div className="calendar-grid-head">
+        {sweDays.map((d, i) => (
+          <span key={`dow-${i}`}>{d}</span>
+        ))}
+      </div>
+      <div className="calendar-grid">
+        {Array.from({ length: startPad }).map((_, i) => (
+          <span key={`pad-${i}`} className="cal-cell empty" />
+        ))}
+        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => (
+          <button
+            key={day}
+            type="button"
+            className={`cal-cell day ${day === selectedDay ? 'selected' : ''}`}
+            onClick={() => pickDay(day)}
+          >
+            {day}
+          </button>
+        ))}
+      </div>
+      <div className="time-row">
+        <span>{t('prebook.time')}</span>
+        <button
+          type="button"
+          className="time-24h-pill time-24h-pill-trigger"
+          aria-label={t('prebook.timePickerOpen')}
+          aria-haspopup="dialog"
+          aria-expanded={timePickerOpen}
+          onClick={() => setTimePickerOpen(true)}
+        >
+          <span className="time-trigger-h">{String(pickHour).padStart(2, '0')}</span>
+          <span className="time-sep" aria-hidden>
+            :
+          </span>
+          <span className="time-trigger-m">{String(pickMinute).padStart(2, '0')}</span>
+        </button>
+      </div>
+      <Clock24hTimePicker
+        open={timePickerOpen}
+        onClose={() => setTimePickerOpen(false)}
+        onConfirm={(h, m) => {
+          setPickHour(h)
+          setPickMinute(m)
+        }}
+        initialHour={pickHour}
+        initialMinute={pickMinute}
+        title={t('prebook.timePickerTitle')}
+        cancelLabel={t('prebook.timePickerCancel')}
+        okLabel={t('common.ok')}
+        keyboardAria={t('prebook.timePickerKeyboard')}
+        keyboardHourLabel={t('prebook.timePickerHourField')}
+        keyboardMinuteLabel={t('prebook.timePickerMinuteField')}
+      />
+      <button type="button" className="btn btn-fortsatt" onClick={onFortsatt}>
+        {t('prebook.continue')}
+      </button>
+    </div>
+  )
+}
+
+function BookingConfirmPage() {
+  const { t } = useI18n()
+  const navigate = useNavigate()
+  const { state } = useLocation()
+  const ride = (state as { ride?: RideResponse } | null)?.ride
+
+  useEffect(() => {
+    if (!ride) navigate('/app', { replace: true })
+  }, [ride, navigate])
+
+  if (!ride) return null
+
+  return (
+    <div className="confirm-screen">
+      <h1 className="confirm-title">{t('confirm.title')}</h1>
+      <div className="confirm-card">
+        <p>
+          <strong>{t('confirm.from')}</strong> {ride.fromAddress}
+        </p>
+        <p>
+          <strong>{t('confirm.to')}</strong> {ride.toAddress}
+        </p>
+        <p>
+          <strong>{t('confirm.time')}</strong> {formatYmdHm(ride.scheduledAt)}
+        </p>
+        <p className="tiny">
+          {t('confirm.rideId')} {ride.id}
+        </p>
+      </div>
+      <button type="button" className="btn btn-primary" onClick={() => navigate('/app')}>
+        {t('common.ok')}
+      </button>
+    </div>
+  )
+}
+
 function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
+  const { t, locale } = useI18n()
   const [upcoming, setUpcoming] = useState<RideResponse[]>([])
   const [history, setHistory] = useState<RideResponse[]>([])
+  const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
 
   async function load() {
     const up = await api<RideResponse[]>('/api/rides/my?history=false', { token })
@@ -370,51 +974,97 @@ function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) =
   }, [])
 
   async function cancel(rideId: number) {
-    await api(`/api/rides/${rideId}/cancel`, { method: 'POST', token, body: JSON.stringify({ reason: 'User cancelled' }) })
-    onToast('Resan avbokad.')
+    await api(`/api/rides/${rideId}/cancel`, {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ reason: t('rides.cancelReason') })
+    })
+    onToast(t('rides.cancelledToast'))
     load()
   }
 
   async function share(rideId: number) {
     const res = await api<{ url: string }>(`/api/rides/${rideId}/share`, { method: 'POST', token })
     await navigator.clipboard.writeText(res.url)
-    onToast('Share-lank kopierad.')
+    onToast(t('rides.shareCopiedToast'))
   }
 
   async function feedback(rideId: number) {
     await api(`/api/rides/${rideId}/feedback`, {
       method: 'POST',
       token,
-      body: JSON.stringify({ stars: 5, comment: 'Basta farfar!' })
+      body: JSON.stringify({ stars: 5, comment: t('rides.feedbackComment') })
     })
-    onToast('Tack for din feedback!')
+    onToast(t('rides.feedbackThanksToast'))
   }
 
+  async function deleteRide(rideId: number) {
+    await api(`/api/rides/${rideId}`, { method: 'DELETE', token })
+    onToast(t('rides.deletedToast'))
+    load()
+  }
+
+  const canDeleteFromList = (ride: RideResponse) =>
+    ride.status === 'CANCELLED' || ride.status === 'REJECTED'
+
   return (
-    <div className="stack">
+    <div className="subpage-wrap stack">
+      <Link className="link-back" to="/app">
+        {t('rides.backToBooking')}
+      </Link>
       <div className="card">
-        <h3>Kommande resor</h3>
-        {upcoming.length === 0 && <p>Inga kommande resor än.</p>}
+        <h3>{t('rides.upcoming')}</h3>
+        {upcoming.length === 0 && <p>{t('rides.noUpcoming')}</p>}
         {upcoming.map((ride) => (
           <article key={ride.id} className="ride-item">
-            <p><strong>{ride.fromAddress}</strong> till <strong>{ride.toAddress}</strong></p>
-            <p>{new Date(ride.scheduledAt).toLocaleString()} - {ride.status}</p>
-            {ride.etaMinutes && <p>ETA: ~{ride.etaMinutes} min</p>}
+            <p>
+              <strong>{ride.fromAddress}</strong> {t('rides.toWord')} <strong>{ride.toAddress}</strong>
+            </p>
+            <p>
+              {formatLocaleDateTime24h(ride.scheduledAt, dateLocale)} - {ride.status}
+            </p>
+            {ride.etaMinutes && <p>{t('rides.eta', { min: ride.etaMinutes })}</p>}
             <div className="row">
-              {ride.status === 'PENDING_OPEN' && <button onClick={() => cancel(ride.id)} className="btn">Avboka</button>}
-              <button onClick={() => share(ride.id)} className="btn">Share trip</button>
+              {ride.status === 'PENDING_OPEN' && (
+                <button onClick={() => cancel(ride.id)} className="btn">
+                  {t('rides.cancel')}
+                </button>
+              )}
+              {canDeleteFromList(ride) && (
+                <button type="button" onClick={() => deleteRide(ride.id)} className="btn btn-danger">
+                  {t('rides.delete')}
+                </button>
+              )}
+              <button onClick={() => share(ride.id)} className="btn">
+                {t('rides.shareTrip')}
+              </button>
             </div>
           </article>
         ))}
       </div>
       <div className="card">
-        <h3>Historik</h3>
-        {history.length === 0 && <p>Ingen historik än.</p>}
+        <h3>{t('rides.history')}</h3>
+        {history.length === 0 && <p>{t('rides.noHistory')}</p>}
         {history.map((ride) => (
           <article key={ride.id} className="ride-item">
-            <p>{ride.fromAddress} till {ride.toAddress}</p>
-            <p>{new Date(ride.scheduledAt).toLocaleString()} - {ride.status}</p>
-            {ride.status === 'COMPLETED' && <button className="btn" onClick={() => feedback(ride.id)}>Tack + 5★</button>}
+            <p>
+              {ride.fromAddress} {t('rides.toWord')} {ride.toAddress}
+            </p>
+            <p>
+              {formatLocaleDateTime24h(ride.scheduledAt, dateLocale)} - {ride.status}
+            </p>
+            <div className="row">
+              {ride.status === 'COMPLETED' && (
+                <button type="button" className="btn" onClick={() => feedback(ride.id)}>
+                  {t('rides.thanksStars')}
+                </button>
+              )}
+              {canDeleteFromList(ride) && (
+                <button type="button" onClick={() => deleteRide(ride.id)} className="btn btn-danger">
+                  {t('rides.delete')}
+                </button>
+              )}
+            </div>
           </article>
         ))}
       </div>
@@ -423,9 +1073,11 @@ function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) =
 }
 
 function DriverPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
+  const { t, locale } = useI18n()
   const [openRides, setOpenRides] = useState<RideResponse[]>([])
   const [stats, setStats] = useState<{ completedRides: number; acceptedRides: number } | null>(null)
   const watchId = useRef<number | null>(null)
+  const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
 
   async function load() {
     const [rides, statsRes] = await Promise.all([
@@ -447,7 +1099,7 @@ function DriverPage({ token, onToast }: { token: string; onToast: (m: string) =>
 
   async function accept(rideId: number) {
     await api(`/api/driver/rides/${rideId}/accept`, { method: 'POST', token })
-    onToast('Du accepterade resan.')
+    onToast(t('driver.toastAccepted'))
     load()
   }
 
@@ -455,14 +1107,14 @@ function DriverPage({ token, onToast }: { token: string; onToast: (m: string) =>
     await api(`/api/driver/rides/${rideId}/refuse`, {
       method: 'POST',
       token,
-      body: JSON.stringify({ comment: 'Kan ej just nu' })
+      body: JSON.stringify({ comment: t('driver.refuseComment') })
     })
-    onToast('Resa nekad.')
+    onToast(t('driver.toastRefused'))
   }
 
   async function startDriving(rideId: number) {
     await api(`/api/driver/rides/${rideId}/start`, { method: 'POST', token })
-    onToast('Start driving aktiverad.')
+    onToast(t('driver.toastStartDriving'))
     if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current)
     watchId.current = navigator.geolocation.watchPosition(async (pos) => {
       await api(`/api/driver/rides/${rideId}/location`, {
@@ -483,25 +1135,25 @@ function DriverPage({ token, onToast }: { token: string; onToast: (m: string) =>
       navigator.geolocation.clearWatch(watchId.current)
       watchId.current = null
     }
-    onToast('Resan ar klar.')
+    onToast(t('driver.toastComplete'))
     load()
   }
 
   async function setupPush() {
     if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-      onToast('Push stods inte i denna browser.')
+      onToast(t('driver.pushNotSupported'))
       return
     }
     const permission = await Notification.requestPermission()
     if (permission !== 'granted') {
-      onToast('Push tillatelse nekades.')
+      onToast(t('driver.pushDenied'))
       return
     }
     const registration = await navigator.serviceWorker.ready
     const existing = await registration.pushManager.getSubscription()
     const { publicKey } = await api<{ publicKey: string }>('/api/public/push-config')
     if (!publicKey) {
-      onToast('VAPID public key saknas i backend-konfigurationen.')
+      onToast(t('driver.pushMissingKey'))
       return
     }
     const sub = existing ?? await registration.pushManager.subscribe({
@@ -519,31 +1171,49 @@ function DriverPage({ token, onToast }: { token: string; onToast: (m: string) =>
         userAgent: navigator.userAgent
       })
     })
-    onToast('Push aktiverad.')
+    onToast(t('driver.pushEnabled'))
   }
 
   return (
-    <div className="stack">
+    <div className="subpage-wrap stack">
       <div className="card">
-        <h3>Forarpanel</h3>
+        <h3>{t('driver.panel')}</h3>
         <div className="row">
-          <button className="btn" onClick={load}>Uppdatera</button>
-          <button className="btn" onClick={setupPush}>Aktivera push</button>
+          <button className="btn" onClick={load}>
+            {t('driver.refresh')}
+          </button>
+          <button className="btn" onClick={setupPush}>
+            {t('driver.enablePush')}
+          </button>
         </div>
-        {stats && <p>Stats: {stats.completedRides} klara / {stats.acceptedRides} accepterade</p>}
+        {stats && (
+          <p>
+            {t('driver.stats', { completed: stats.completedRides, accepted: stats.acceptedRides })}
+          </p>
+        )}
       </div>
       <div className="card">
-        <h3>Oppna resor</h3>
-        {openRides.length === 0 && <p>Inga oppna resor just nu.</p>}
+        <h3>{t('driver.openRides')}</h3>
+        {openRides.length === 0 && <p>{t('driver.noOpenRides')}</p>}
         {openRides.map((ride) => (
           <article key={ride.id} className="ride-item">
-            <p><strong>{ride.fromAddress}</strong> till <strong>{ride.toAddress}</strong></p>
-            <p>{new Date(ride.scheduledAt).toLocaleString()}</p>
+            <p>
+              <strong>{ride.fromAddress}</strong> {t('rides.toWord')} <strong>{ride.toAddress}</strong>
+            </p>
+            <p>{formatLocaleDateTime24h(ride.scheduledAt, dateLocale)}</p>
             <div className="row">
-              <button className="btn btn-primary" onClick={() => accept(ride.id)}>Acceptera</button>
-              <button className="btn" onClick={() => refuse(ride.id)}>Neka</button>
-              <button className="btn" onClick={() => startDriving(ride.id)}>Start driving</button>
-              <button className="btn" onClick={() => complete(ride.id)}>Klar</button>
+              <button className="btn btn-primary" onClick={() => accept(ride.id)}>
+                {t('driver.accept')}
+              </button>
+              <button className="btn" onClick={() => refuse(ride.id)}>
+                {t('driver.refuse')}
+              </button>
+              <button className="btn" onClick={() => startDriving(ride.id)}>
+                {t('driver.startDriving')}
+              </button>
+              <button className="btn" onClick={() => complete(ride.id)}>
+                {t('driver.complete')}
+              </button>
             </div>
           </article>
         ))}
@@ -553,6 +1223,7 @@ function DriverPage({ token, onToast }: { token: string; onToast: (m: string) =>
 }
 
 function AdminPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
+  const { t } = useI18n()
   const [users, setUsers] = useState<Array<{ id: number; fullName: string; email: string; role: string }>>([])
   const [rideIdToDelete, setRideIdToDelete] = useState('')
 
@@ -567,13 +1238,13 @@ function AdminPage({ token, onToast }: { token: string; onToast: (m: string) => 
 
   async function promote(userId: number) {
     await api(`/api/admin/users/${userId}/promote-driver`, { method: 'POST', token })
-    onToast('User promoted to driver.')
+    onToast(t('admin.toastPromoted'))
     load()
   }
 
   async function demote(userId: number) {
     await api(`/api/admin/users/${userId}/demote-user`, { method: 'POST', token })
-    onToast('Driver demoted to user.')
+    onToast(t('admin.toastDemoted'))
     load()
   }
 
@@ -583,49 +1254,63 @@ function AdminPage({ token, onToast }: { token: string; onToast: (m: string) => 
       token,
       body: JSON.stringify({ mustChangePassword: true })
     })
-    onToast('Forced password change set.')
+    onToast(t('admin.toastForcePw'))
   }
 
   async function deleteRide() {
     await api(`/api/admin/rides/${rideIdToDelete}`, { method: 'DELETE', token })
-    onToast('Ride deleted.')
+    onToast(t('admin.toastRideDeleted'))
   }
 
   return (
-    <div className="stack">
+    <div className="subpage-wrap stack">
       <div className="card">
-        <h3>Users</h3>
+        <h3>{t('admin.users')}</h3>
         {users.map((u) => (
           <article key={u.id} className="ride-item">
-            <p>{u.fullName} ({u.email}) - {u.role}</p>
+            <p>
+              {u.fullName} ({u.email}) - {u.role}
+            </p>
             <div className="row">
-              <button className="btn" onClick={() => promote(u.id)}>Promote</button>
-              <button className="btn" onClick={() => demote(u.id)}>Demote</button>
-              <button className="btn" onClick={() => forcePassword(u.id)}>Force password</button>
+              <button className="btn" onClick={() => promote(u.id)}>
+                {t('admin.promote')}
+              </button>
+              <button className="btn" onClick={() => demote(u.id)}>
+                {t('admin.demote')}
+              </button>
+              <button className="btn" onClick={() => forcePassword(u.id)}>
+                {t('admin.forcePassword')}
+              </button>
             </div>
           </article>
         ))}
       </div>
       <div className="card">
-        <h3>Delete ride (admin)</h3>
-        <input value={rideIdToDelete} onChange={(e) => setRideIdToDelete(e.target.value)} placeholder="Ride ID" />
-        <button className="btn btn-danger" onClick={deleteRide}>Delete future/historical ride</button>
+        <h3>{t('admin.deleteRideTitle')}</h3>
+        <input
+          value={rideIdToDelete}
+          onChange={(e) => setRideIdToDelete(e.target.value)}
+          placeholder={t('admin.rideIdPlaceholder')}
+        />
+        <button className="btn btn-danger" onClick={deleteRide}>
+          {t('admin.deleteRideBtn')}
+        </button>
       </div>
     </div>
   )
 }
 
 function HelpPage() {
+  const { t, ta } = useI18n()
   return (
-    <section className="card">
-      <h3>Hjalp & FAQ</h3>
+    <section className="card subpage-wrap">
+      <h3>{t('help.title')}</h3>
       <ul>
-        <li>Installera appen via "Add to Home Screen".</li>
-        <li>Tillat notiser for att fa booking-uppdateringar.</li>
-        <li>Forare maste ha appen oppen for battre live ETA via GPS.</li>
-        <li>Anvand "Share trip" for att dela ETA med familj.</li>
+        {ta('help.items').map((line, i) => (
+          <li key={i}>{line}</li>
+        ))}
       </ul>
-      <p className="tiny">Farfartaxi ar familjevallig, snabb och rolig att anvanda.</p>
+      <p className="tiny">{t('help.footer')}</p>
     </section>
   )
 }
@@ -690,7 +1375,21 @@ function urlBase64ToUint8Array(base64String: string) {
 
 function getErrorMessage(err: unknown) {
   if (err instanceof Error) return err.message
-  return 'Nagot gick fel'
+  return ''
+}
+
+/** Maps backend validation text to localized toast copy for booking. */
+function bookingApiErrorMessage(
+  err: unknown,
+  t: (key: string, vars?: Record<string, string | number>) => string
+) {
+  const msg = getErrorMessage(err)
+  if (!msg) return t('errors.generic')
+  const lower = msg.toLowerCase()
+  if (lower.includes('future') || lower.includes('scheduledat')) {
+    return t('errors.bookingFuture')
+  }
+  return t('errors.bookingFailed', { message: msg })
 }
 
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number) {
