@@ -666,6 +666,13 @@ button.drawer-link {
   color: #71717a;
 }
 
+.dist-hint-sub {
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: #52525b;
+  line-height: 1.35;
+}
+
 .booking-actions {
   display: flex;
   gap: 0.65rem;

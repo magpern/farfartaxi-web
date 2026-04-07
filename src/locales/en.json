@@ -50,7 +50,9 @@
     "destinationPlaceholder": "Add destination",
     "destinationAria": "Destination",
     "clearDestination": "Clear destination",
-    "distanceKm": "Estimated straight-line distance: {{km}} km",
+    "distanceKm": "Straight line: ~{{km}} km",
+    "roadRoute": "Approx. driving distance: ~{{km}} km · ~{{min}} min (road network)",
+    "routingAttribution": "Route: OSRM / OpenStreetMap · demo service, not for heavy use.",
     "forboka": "Pre-book",
     "akaNu": "Go now",
     "fillBoth": "Enter both pickup and destination."

@@ -50,7 +50,9 @@
     "destinationPlaceholder": "Lägg till destination",
     "destinationAria": "Destination",
     "clearDestination": "Rensa destination",
-    "distanceKm": "Uppskattad rak distans: {{km}} km",
+    "distanceKm": "Rak linje: ca {{km}} km",
+    "roadRoute": "Ungefärlig körsträcka: ca {{km}} km · ~{{min}} min (vägnät)",
+    "routingAttribution": "Rutt: OSRM / OpenStreetMap · demo-tjänst, ej för hög belastning.",
     "forboka": "Förboka",
     "akaNu": "Åka nu",
     "fillBoth": "Fyll i både start och destination."

@@ -98,6 +98,16 @@ type NominatimResult = {
   address?: Record<string, string | undefined>
 }
 
+/** OSRM route response (subset; geometries=geojson). */
+type OsrmRouteResponse = {
+  code: string
+  routes?: Array<{
+    distance: number
+    duration: number
+    geometry: { type: string; coordinates: number[][] }
+  }>
+}
+
 /** Local area (kommun-level): "Järfälla kommun" → "Järfälla", not län/county (e.g. Stockholm). */
 function stripKommunSuffix(raw: string): string {
   return raw.replace(/\s+kommun$/i, '').trim()
@@ -739,7 +749,13 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
   const { t } = useI18n()
   const navigate = useNavigate()
   const { draft, setDraft, clearBookingDraft } = useBookingDraft()
+  const draftRef = useRef(draft)
+  draftRef.current = draft
   const mapRef = useRef<L.Map | null>(null)
+  const routeLineRef = useRef<L.Polyline | null>(null)
+  /** Skip one moveend reverse-geocode after programmatic map moves (search pick, GPS, route fitBounds). */
+  const skipReverseOnMoveEndRef = useRef(false)
+  const reverseGeocodeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mapNode = useRef<HTMLDivElement | null>(null)
   const activeFieldRef = useRef<'from' | 'to'>('from')
   const [activeField, setActiveField] = useState<'from' | 'to'>('from')
@@ -752,6 +768,7 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
     () => haversine(draft.fromLat, draft.fromLon, draft.toLat, draft.toLon),
     [draft.fromLat, draft.fromLon, draft.toLat, draft.toLon]
   )
+  const [roadRoute, setRoadRoute] = useState<{ km: number; min: number } | null>(null)
 
   // One Leaflet map per BookingPage mount; draft is from this mount (restored via sessionStorage when returning from Förboka).
   useEffect(() => {
@@ -764,21 +781,19 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
     } = draft
     const skipFirstMoveEnd = fromAddress.trim().length > 0 && toAddress.trim().length > 0
     const bothAddressesEmpty = !fromAddress.trim() && !toAddress.trim()
-    /** Skip reverse-geocode on programmatic pans (restored draft, initial frame, GPS center). */
-    const skipMoveEndRef = { current: skipFirstMoveEnd || bothAddressesEmpty }
+    skipReverseOnMoveEndRef.current = skipFirstMoveEnd || bothAddressesEmpty
     const map = L.map(mapNode.current).setView([initFromLat, initFromLon], 13)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map)
-    let reverseDebounceId: ReturnType<typeof setTimeout> | null = null
     map.on('moveend', () => {
-      if (skipMoveEndRef.current) {
-        skipMoveEndRef.current = false
+      if (skipReverseOnMoveEndRef.current) {
+        skipReverseOnMoveEndRef.current = false
         return
       }
-      if (reverseDebounceId != null) clearTimeout(reverseDebounceId)
-      reverseDebounceId = window.setTimeout(() => {
-        reverseDebounceId = null
+      if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
+      reverseGeocodeDebounceRef.current = window.setTimeout(() => {
+        reverseGeocodeDebounceRef.current = null
         void (async () => {
           const center = map.getCenter()
           const field = activeFieldRef.current
@@ -822,7 +837,7 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
           if (!m) return
           const { latitude, longitude } = pos.coords
           if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return
-          skipMoveEndRef.current = true
+          skipReverseOnMoveEndRef.current = true
           m.setView([latitude, longitude], 17)
         },
         () => {
@@ -833,7 +848,8 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
     }
 
     return () => {
-      if (reverseDebounceId != null) clearTimeout(reverseDebounceId)
+      if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
+      reverseGeocodeDebounceRef.current = null
       map.remove()
       mapRef.current = null
     }
@@ -841,12 +857,98 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
   }, [setDraft])
 
   useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+
+    const clearRouteLine = () => {
+      if (routeLineRef.current) {
+        map.removeLayer(routeLineRef.current)
+        routeLineRef.current = null
+      }
+    }
+
+    const { fromLat, fromLon, toLat, toLon } = draft
+    if (![fromLat, fromLon, toLat, toLon].every(Number.isFinite)) {
+      clearRouteLine()
+      setRoadRoute(null)
+      return
+    }
+    if (haversine(fromLat, fromLon, toLat, toLon) < 0.02) {
+      clearRouteLine()
+      setRoadRoute(null)
+      return
+    }
+
+    const ac = new AbortController()
+    const debounceId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const url =
+            `${API_URL}/api/public/route/driving?fromLat=${encodeURIComponent(String(fromLat))}` +
+            `&fromLon=${encodeURIComponent(String(fromLon))}&toLat=${encodeURIComponent(String(toLat))}` +
+            `&toLon=${encodeURIComponent(String(toLon))}`
+          const res = await fetch(url, {
+            signal: ac.signal,
+            headers: { Accept: 'application/json' }
+          })
+          if (!res.ok) {
+            clearRouteLine()
+            setRoadRoute(null)
+            return
+          }
+          const data = (await res.json()) as OsrmRouteResponse
+          const rte = data.routes?.[0]
+          const coords = rte?.geometry?.coordinates
+          if (data.code !== 'Ok' || !rte || !coords?.length) {
+            clearRouteLine()
+            setRoadRoute(null)
+            return
+          }
+          const latlngs: L.LatLngExpression[] = coords.map((c) => [c[1], c[0]] as L.LatLngTuple)
+          clearRouteLine()
+          const line = L.polyline(latlngs, {
+            color: '#38bdf8',
+            weight: 5,
+            opacity: 0.9,
+            lineJoin: 'round'
+          }).addTo(map)
+          routeLineRef.current = line
+          setRoadRoute({ km: rte.distance / 1000, min: Math.max(1, Math.round(rte.duration / 60)) })
+          const d = draftRef.current
+          if (d.fromAddress.trim().length > 0 && d.toAddress.trim().length > 0) {
+            if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
+            reverseGeocodeDebounceRef.current = null
+            skipReverseOnMoveEndRef.current = true
+            map.fitBounds(line.getBounds(), { padding: [32, 32], maxZoom: 15 })
+          }
+        } catch (e) {
+          const name = e instanceof Error ? e.name : ''
+          if (name === 'AbortError') return
+          clearRouteLine()
+          setRoadRoute(null)
+        }
+      })()
+    }, 450)
+
+    return () => {
+      window.clearTimeout(debounceId)
+      ac.abort()
+      const m = mapRef.current
+      if (m && routeLineRef.current) {
+        m.removeLayer(routeLineRef.current)
+        routeLineRef.current = null
+      }
+    }
+  }, [draft.fromLat, draft.fromLon, draft.toLat, draft.toLon])
+
+  useEffect(() => {
     const id = setTimeout(async () => {
-      if (query.length < 3) {
+      const q = query.normalize('NFC').trim()
+      if (q.length < 3) {
         setSearchResults([])
         return
       }
-      const url = `${API_URL}/api/public/geocode/search?q=${encodeURIComponent(query)}&limit=5&countrycodes=se`
+      const url = `${API_URL}/api/public/geocode/search?q=${encodeURIComponent(q)}&limit=5&countrycodes=se`
       const res = await fetch(url, { headers: { Accept: 'application/json' } })
       if (!res.ok) {
         setSearchResults([])
@@ -861,6 +963,9 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
   function applySearchResult(item: NominatimResult) {
     const lat = Number(item.lat)
     const lon = Number(item.lon)
+    if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
+    reverseGeocodeDebounceRef.current = null
+    skipReverseOnMoveEndRef.current = true
     mapRef.current?.setView([lat, lon], 15)
     const label = formatNominatimAddress(item) || item.display_name
     if (activeField === 'from') {
@@ -976,7 +1081,7 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
             </div>
           </div>
         </div>
-        {searchResults.length > 0 && query.length >= 3 && (
+        {searchResults.length > 0 && query.normalize('NFC').trim().length >= 3 && (
           <ul className="search-list sheet-search">
             {searchResults.map((item) => (
               <li key={`${item.lat}-${item.lon}-${item.display_name}`}>
@@ -987,7 +1092,12 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
             ))}
           </ul>
         )}
-        <p className="dist-hint">{t('booking.distanceKm', { km: distanceKm.toFixed(2) })}</p>
+        <p className="dist-hint">
+          {roadRoute
+            ? t('booking.roadRoute', { km: roadRoute.km.toFixed(1), min: roadRoute.min })
+            : t('booking.distanceKm', { km: distanceKm.toFixed(2) })}
+        </p>
+        {roadRoute && <p className="dist-hint dist-hint-sub">{t('booking.routingAttribution')}</p>}
         <div className="booking-actions">
           <button type="button" className="btn btn-outline" onClick={goForboka}>
             {t('booking.forboka')}
