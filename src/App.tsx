@@ -13,6 +13,12 @@ import {
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useI18n } from './i18n/context'
 import { Clock24hTimePicker } from './Clock24hTimePicker'
+import {
+  FARFARTAXI_PWA_INSTALL_SESSION_KEY,
+  isStandalonePwa,
+  PwaInstallModal,
+  schedulePwaInstallPrompt
+} from './PwaInstallModal'
 import L from 'leaflet'
 import { registerSW } from 'virtual:pwa-register'
 import 'leaflet/dist/leaflet.css'
@@ -79,11 +85,7 @@ const API_URL = import.meta.env.DEV
   ? ''
   : (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
-/** Nominatim requires a descriptive User-Agent (https://operations.osmfoundation.org/policies/nominatim/). */
-const NOMINATIM_HEADERS: HeadersInit = {
-  Accept: 'application/json',
-  'User-Agent': 'Farfartaxi/1.0 (family taxi booking; https://github.com/magpern/farfartaxi-web)'
-}
+/** Geocoding is proxied by the backend (`/api/public/geocode/*`) so the browser avoids CORS and shared rate limits. */
 
 type NominatimResult = {
   display_name: string
@@ -349,6 +351,7 @@ function AuthPage() {
           method: 'POST',
           body: JSON.stringify({ credential })
         })
+        schedulePwaInstallPrompt()
         setAuth(res)
         navigate('/app', { replace: true })
       } catch (err) {
@@ -412,6 +415,7 @@ function AuthPage() {
           method: 'POST',
           body: JSON.stringify({ email, password })
         })
+        schedulePwaInstallPrompt()
         setAuth(res)
         navigate('/app', { replace: true })
       } else if (mode === 'register') {
@@ -419,6 +423,7 @@ function AuthPage() {
           method: 'POST',
           body: JSON.stringify({ email, password, fullName: name })
         })
+        schedulePwaInstallPrompt()
         setAuth(res)
         navigate('/app', { replace: true })
       } else {
@@ -537,6 +542,8 @@ function Dashboard({ auth, setAuth }: { auth: AuthResponse; setAuth: (a: AuthRes
   const [toast, setToast] = useState('')
   const [toastVisible, setToastVisible] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [pwaInstallOpen, setPwaInstallOpen] = useState(false)
+  const showPwaInstallMenu = !isStandalonePwa()
   const [draft, setDraft] = useState<BookingDraft>(() => readBookingDraftFromStorage() ?? defaultDraft)
   const location = useLocation()
   const hideTopBar = location.pathname.includes('/forboka') || location.pathname.includes('/bekraftelse')
@@ -544,6 +551,17 @@ function Dashboard({ auth, setAuth }: { auth: AuthResponse; setAuth: (a: AuthRes
   useEffect(() => {
     writeBookingDraftToStorage(draft)
   }, [draft])
+
+  useEffect(() => {
+    if (isStandalonePwa()) return
+    try {
+      if (sessionStorage.getItem(FARFARTAXI_PWA_INSTALL_SESSION_KEY) === '1') {
+        setPwaInstallOpen(true)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   useEffect(() => {
     if (!toast) {
@@ -579,6 +597,7 @@ function Dashboard({ auth, setAuth }: { auth: AuthResponse; setAuth: (a: AuthRes
         {toast && (
           <div className={`toast toast-floating ${toastVisible ? 'toast-floating-visible' : ''}`}>{toast}</div>
         )}
+        <PwaInstallModal open={pwaInstallOpen} onClose={() => setPwaInstallOpen(false)} />
         {!hideTopBar && (
           <header className="booking-topbar">
             <button type="button" className="icon-btn" onClick={() => setMenuOpen(true)} aria-label={t('topbar.menuAria')}>
@@ -611,6 +630,8 @@ function Dashboard({ auth, setAuth }: { auth: AuthResponse; setAuth: (a: AuthRes
         {menuOpen && (
           <SideMenu
             auth={auth}
+            showPwaInstall={showPwaInstallMenu}
+            onOpenPwaInstall={() => setPwaInstallOpen(true)}
             onClose={() => setMenuOpen(false)}
             onLogout={() => {
               try {
@@ -629,10 +650,14 @@ function Dashboard({ auth, setAuth }: { auth: AuthResponse; setAuth: (a: AuthRes
 
 function SideMenu({
   auth,
+  showPwaInstall,
+  onOpenPwaInstall,
   onClose,
   onLogout
 }: {
   auth: AuthResponse
+  showPwaInstall: boolean
+  onOpenPwaInstall: () => void
   onClose: () => void
   onLogout: () => void
 }) {
@@ -653,6 +678,18 @@ function SideMenu({
         <Link className="drawer-link" to="/app/resor" onClick={onClose}>
           {t('menu.myRides')}
         </Link>
+        {showPwaInstall && (
+          <button
+            type="button"
+            className="drawer-link"
+            onClick={() => {
+              onOpenPwaInstall()
+              onClose()
+            }}
+          >
+            {t('menu.installApp')}
+          </button>
+        )}
         <Link className="drawer-link" to="/app/hjalp" onClick={onClose}>
           {t('menu.help')}
         </Link>
@@ -726,46 +763,77 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
       fromLon: initFromLon
     } = draft
     const skipFirstMoveEnd = fromAddress.trim().length > 0 && toAddress.trim().length > 0
-    let skipMoveEndPending = skipFirstMoveEnd
+    const bothAddressesEmpty = !fromAddress.trim() && !toAddress.trim()
+    /** Skip reverse-geocode on programmatic pans (restored draft, initial frame, GPS center). */
+    const skipMoveEndRef = { current: skipFirstMoveEnd || bothAddressesEmpty }
     const map = L.map(mapNode.current).setView([initFromLat, initFromLon], 13)
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map)
-    map.on('moveend', async () => {
-      if (skipMoveEndPending) {
-        skipMoveEndPending = false
+    let reverseDebounceId: ReturnType<typeof setTimeout> | null = null
+    map.on('moveend', () => {
+      if (skipMoveEndRef.current) {
+        skipMoveEndRef.current = false
         return
       }
-      const center = map.getCenter()
-      const field = activeFieldRef.current
-      try {
-        const url =
-          `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18` +
-          `&lat=${center.lat}&lon=${center.lng}`
-        const data = (await fetch(url, { headers: NOMINATIM_HEADERS }).then((r) => r.json())) as NominatimResult
-        const address =
-          formatNominatimAddress(data) || data.display_name || `${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`
-        if (field === 'from') {
-          setDraft((d) => ({
-            ...d,
-            fromAddress: address,
-            fromLat: center.lat,
-            fromLon: center.lng
-          }))
-        } else {
-          setDraft((d) => ({
-            ...d,
-            toAddress: address,
-            toLat: center.lat,
-            toLon: center.lng
-          }))
-        }
-      } catch {
-        // no-op
-      }
+      if (reverseDebounceId != null) clearTimeout(reverseDebounceId)
+      reverseDebounceId = window.setTimeout(() => {
+        reverseDebounceId = null
+        void (async () => {
+          const center = map.getCenter()
+          const field = activeFieldRef.current
+          const zoom = Math.min(18, Math.max(1, Math.round(map.getZoom())))
+          try {
+            const url = `${API_URL}/api/public/geocode/reverse?lat=${center.lat}&lon=${center.lng}&zoom=${zoom}`
+            const res = await fetch(url, { headers: { Accept: 'application/json' } })
+            if (!res.ok) return
+            const data = (await res.json()) as NominatimResult
+            const address =
+              formatNominatimAddress(data) ||
+              data.display_name ||
+              `${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`
+            if (field === 'from') {
+              setDraft((d) => ({
+                ...d,
+                fromAddress: address,
+                fromLat: center.lat,
+                fromLon: center.lng
+              }))
+            } else {
+              setDraft((d) => ({
+                ...d,
+                toAddress: address,
+                toLat: center.lat,
+                toLon: center.lng
+              }))
+            }
+          } catch {
+            // no-op
+          }
+        })()
+      }, 550)
     })
     mapRef.current = map
+
+    if (bothAddressesEmpty && typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const m = mapRef.current
+          if (!m) return
+          const { latitude, longitude } = pos.coords
+          if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return
+          skipMoveEndRef.current = true
+          m.setView([latitude, longitude], 17)
+        },
+        () => {
+          /* keep default map center; permission denied or timeout */
+        },
+        { enableHighAccuracy: false, maximumAge: 60_000, timeout: 12_000 }
+      )
+    }
+
     return () => {
+      if (reverseDebounceId != null) clearTimeout(reverseDebounceId)
       map.remove()
       mapRef.current = null
     }
@@ -778,11 +846,14 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
         setSearchResults([])
         return
       }
-      const url =
-        `https://nominatim.openstreetmap.org/search?format=jsonv2` +
-        `&q=${encodeURIComponent(query)}&addressdetails=1&limit=5&countrycodes=se`
-      const data = (await fetch(url, { headers: NOMINATIM_HEADERS }).then((r) => r.json())) as NominatimResult[]
-      setSearchResults(data)
+      const url = `${API_URL}/api/public/geocode/search?q=${encodeURIComponent(query)}&limit=5&countrycodes=se`
+      const res = await fetch(url, { headers: { Accept: 'application/json' } })
+      if (!res.ok) {
+        setSearchResults([])
+        return
+      }
+      const data = (await res.json()) as NominatimResult[]
+      setSearchResults(Array.isArray(data) ? data : [])
     }, 350)
     return () => clearTimeout(id)
   }, [query])
@@ -1628,6 +1699,15 @@ function HelpPage() {
   const { t, ta } = useI18n()
   return (
     <section className="card subpage-wrap">
+      <div className="help-install-callout">
+        <h3 className="help-install-callout-title">{t('pwa.helpCalloutTitle')}</h3>
+        <p className="help-install-callout-lead">{t('pwa.helpCalloutLead')}</p>
+        <ul className="install-modal-steps">
+          <li>{t('pwa.manualIos')}</li>
+          <li>{t('pwa.manualAndroid')}</li>
+          <li>{t('pwa.manualDesktop')}</li>
+        </ul>
+      </div>
       <h3>{t('help.title')}</h3>
       <ul>
         {ta('help.items').map((line, i) => (

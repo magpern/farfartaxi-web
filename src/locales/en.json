@@ -32,6 +32,7 @@
     "close": "Close",
     "book": "Book a trip",
     "myRides": "My trips",
+    "installApp": "Add to Home Screen",
     "help": "Help",
     "driver": "Driver",
     "admin": "Admin",
@@ -153,10 +154,23 @@
     "toastUserDeleted": "User deleted.",
     "toastRideDeleted": "Trip deleted."
   },
+  "pwa": {
+    "installTitle": "Add Farfartaxi to your home screen",
+    "installLead": "Install the app for quick access and a full-screen experience, like a native app.",
+    "installBodyChrome": "Your browser can install the app in one step. You can also use the browser menu later.",
+    "installNow": "Install",
+    "notNow": "Not now",
+    "manualIntro": "There’s no quick install button here. Use your browser’s menu instead:",
+    "manualIos": "iPhone/iPad: tap Share, then “Add to Home Screen”.",
+    "manualAndroid": "Android: open the menu (⋮) and choose “Install app” or “Add to Home screen”.",
+    "manualDesktop": "Desktop: use the install icon in the address bar or the browser menu (e.g. “Install Farfartaxi” / Apps).",
+    "helpCalloutTitle": "Add to Home Screen",
+    "helpCalloutLead": "Open the menu (☰) and choose “Add to Home Screen”, or follow the steps for your device below."
+  },
   "help": {
     "title": "Help & FAQ",
     "items": [
-      "Install the app via “Add to Home Screen”.",
+      "Menu (☰) → “Add to Home Screen”, or use the prompt after you log in.",
       "Allow notifications for booking updates.",
       "Drivers should keep the app open for better live ETA via GPS.",
       "Use “Share trip” to share ETA with family."

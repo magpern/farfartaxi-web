@@ -32,6 +32,7 @@
     "close": "Stäng",
     "book": "Boka resa",
     "myRides": "Mina resor",
+    "installApp": "Lägg till på hemskärmen",
     "help": "Hjälp",
     "driver": "Förare",
     "admin": "Admin",
@@ -153,10 +154,23 @@
     "toastUserDeleted": "Användare borttagen.",
     "toastRideDeleted": "Resa borttagen."
   },
+  "pwa": {
+    "installTitle": "Lägg till Farfartaxi på hemskärmen",
+    "installLead": "Vill du installera appen så att den öppnas som en vanlig app och är lätt att hitta?",
+    "installBodyChrome": "Din webbläsare kan installera appen direkt. Du kan också använda webbläsarens meny senare.",
+    "installNow": "Installera",
+    "notNow": "Inte nu",
+    "manualIntro": "Här finns ingen snabbinstallationsknapp. Gör så här i din webbläsare:",
+    "manualIos": "iPhone/iPad: tryck på Dela-knappen och välj «Lägg till på hemskärmen».",
+    "manualAndroid": "Android: öppna menyn (⋮) och välj «Installera app» eller «Lägg till på startskärmen».",
+    "manualDesktop": "Dator: använd installera-ikonen i adressfältet eller menyn (t.ex. «Installera Farfartaxi» / «Appar»).",
+    "helpCalloutTitle": "Lägg till på hemskärmen",
+    "helpCalloutLead": "Öppna menyn (☰) och välj «Lägg till på hemskärmen», eller följ anvisningarna för din enhet nedan."
+  },
   "help": {
     "title": "Hjälp och vanliga frågor",
     "items": [
-      "Installera appen via \"Lägg till på hemskärmen\".",
+      "Meny (☰) → «Lägg till på hemskärmen» — eller vänta på frågan efter inloggning.",
       "Tillåt notiser för att få bokningsuppdateringar.",
       "Förare bör ha appen öppen för bättre live-ETA via GPS.",
       "Använd \"Dela resa\" för att dela ETA med familjen."

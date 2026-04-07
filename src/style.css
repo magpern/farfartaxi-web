@@ -317,6 +317,66 @@ input {
   font-size: 0.9rem;
 }
 
+.muted {
+  color: #94a3b8;
+}
+
+.install-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2700;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.install-modal-card {
+  max-width: 420px;
+  width: 100%;
+  max-height: min(88vh, 640px);
+  overflow-y: auto;
+}
+
+.install-modal-lead {
+  margin: 0.5rem 0 0.75rem;
+  line-height: 1.45;
+}
+
+.install-modal-steps {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+  line-height: 1.45;
+  color: #e2e8f0;
+}
+
+.install-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.help-install-callout {
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  background: #0c1222;
+}
+
+.help-install-callout-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.help-install-callout-lead {
+  margin: 0 0 0.75rem;
+  color: #94a3b8;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
 /* --- Dashboard (map-first booking) --- */
 .dashboard-shell {
   min-height: 100vh;
@@ -436,6 +496,15 @@ input {
   color: #f1f5f9;
   text-decoration: none;
   border-radius: 8px;
+}
+
+button.drawer-link {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
 }
 
 .drawer-link:hover {
