@@ -18,6 +18,11 @@
     "waiting": "Väntar…",
     "sendResetLink": "Skicka länk",
     "continue": "Fortsätt",
+    "continueWithGoogle": "Fortsätt med Google",
+    "orEmail": "eller med e-post",
+    "adminPasswordHint": "För administratörskonton eller om du loggar in med e-post och lösenord.",
+    "emailPasswordFallback": "E-post och lösenord (admin eller reserv)",
+    "hideEmailLogin": "Dölj e-postinloggning",
     "linkLogin": "Logga in",
     "linkRegister": "Skapa konto",
     "linkForgot": "Glömt lösenord"

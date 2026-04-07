@@ -19,6 +19,24 @@ import 'leaflet/dist/leaflet.css'
 
 registerSW({ immediate: true })
 
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (cfg: {
+            client_id: string
+            callback: (resp: { credential: string }) => void
+            auto_select?: boolean
+          }) => void
+          renderButton: (el: HTMLElement, opts: Record<string, unknown>) => void
+          cancel: () => void
+        }
+      }
+    }
+  }
+}
+
 type Role = 'USER' | 'DRIVER' | 'ADMIN'
 
 type UserView = {
@@ -265,7 +283,7 @@ function LandingPage() {
 }
 
 function AuthPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const navigate = useNavigate()
   const [auth, setAuth] = useLocalAuth()
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login')
@@ -274,12 +292,114 @@ function AuthPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
+  const [googleClientId, setGoogleClientId] = useState('')
+  const [emailFallbackOpen, setEmailFallbackOpen] = useState(false)
+  const googleBtnRef = useRef<HTMLDivElement>(null)
+  const googleInitRef = useRef(false)
+
+  const showGooglePrimary = Boolean(googleClientId) && mode !== 'forgot'
+  const showEmailPanel = !googleClientId || mode === 'forgot' || emailFallbackOpen
+
+  useEffect(() => {
+    if (mode === 'forgot') setEmailFallbackOpen(true)
+  }, [mode])
 
   useEffect(() => {
     if (auth) {
       navigate('/app', { replace: true })
     }
   }, [auth, navigate])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const envRaw = import.meta.env.VITE_GOOGLE_CLIENT_ID
+        const envId = typeof envRaw === 'string' ? envRaw.trim() : ''
+        const cfg = await api<{ googleClientId?: string }>('/api/public/oauth-config')
+        const id = envId || (cfg.googleClientId ?? '').trim()
+        if (!cancelled) setGoogleClientId(id)
+      } catch {
+        if (!cancelled) setGoogleClientId('')
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!googleClientId) return
+    const src = 'https://accounts.google.com/gsi/client'
+    if (document.querySelector(`script[src="${src}"]`)) return
+    const script = document.createElement('script')
+    script.src = src
+    script.async = true
+    script.defer = true
+    document.body.appendChild(script)
+  }, [googleClientId])
+
+  const handleGoogleCredential = useCallback(
+    async (credential: string) => {
+      setPending(true)
+      setError('')
+      try {
+        const res = await api<AuthResponse>('/api/auth/google', {
+          method: 'POST',
+          body: JSON.stringify({ credential })
+        })
+        setAuth(res)
+        navigate('/app', { replace: true })
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('errors.generic'))
+      } finally {
+        setPending(false)
+      }
+    },
+    [navigate, setAuth, t]
+  )
+
+  useEffect(() => {
+    if (!googleClientId) return
+    let intervalId = 0
+    let cancelled = false
+
+    const tryRender = () => {
+      const el = googleBtnRef.current
+      if (cancelled || !el || !window.google?.accounts?.id) return false
+      if (googleInitRef.current) return true
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: (r) => {
+          if (r.credential) void handleGoogleCredential(r.credential)
+        }
+      })
+      window.google.accounts.id.renderButton(el, {
+        theme: 'outline',
+        size: 'large',
+        text: 'continue_with',
+        width: 280,
+        locale: locale === 'en' ? 'en' : 'sv'
+      })
+      googleInitRef.current = true
+      return true
+    }
+
+    intervalId = window.setInterval(() => {
+      if (tryRender()) window.clearInterval(intervalId)
+    }, 50)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+      try {
+        window.google?.accounts?.id?.cancel()
+      } catch {
+        /* ignore */
+      }
+      googleInitRef.current = false
+    }
+  }, [googleClientId, locale, handleGoogleCredential])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -323,43 +443,89 @@ function AuthPage() {
               ? t('auth.registerTitle')
               : t('auth.forgotTitle')}
         </h2>
-        <form onSubmit={submit} className="stack">
-          <label>
-            {t('auth.email')}
-            <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required />
-          </label>
-          {mode !== 'forgot' && (
-            <label>
-              {t('auth.password')}
-              <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required />
-            </label>
-          )}
-          {mode === 'register' && (
-            <label>
-              {t('auth.name')}
-              <input value={name} onChange={(e) => setName(e.target.value)} required />
-            </label>
-          )}
-          {error && <p className="error">{error}</p>}
-          <button className="btn btn-primary" type="submit" disabled={pending}>
-            {pending
-              ? t('auth.waiting')
-              : mode === 'forgot'
-                ? t('auth.sendResetLink')
-                : t('auth.continue')}
-          </button>
-        </form>
-        <div className="auth-links">
-          <button onClick={() => setMode('login')} className="link-btn">
-            {t('auth.linkLogin')}
-          </button>
-          <button onClick={() => setMode('register')} className="link-btn">
-            {t('auth.linkRegister')}
-          </button>
-          <button onClick={() => setMode('forgot')} className="link-btn">
-            {t('auth.linkForgot')}
-          </button>
-        </div>
+        {showGooglePrimary && (
+          <>
+            <div className="auth-oauth-wrap">
+              <div ref={googleBtnRef} aria-label={t('auth.continueWithGoogle')} />
+            </div>
+            {!emailFallbackOpen && (
+              <button
+                type="button"
+                className="auth-fallback-toggle"
+                aria-expanded={false}
+                onClick={() => setEmailFallbackOpen(true)}
+              >
+                {t('auth.emailPasswordFallback')}
+              </button>
+            )}
+          </>
+        )}
+        {showEmailPanel && (
+          <>
+            {showGooglePrimary && emailFallbackOpen && (
+              <div className="auth-email-panel">
+                <p className="auth-hint">{t('auth.adminPasswordHint')}</p>
+                <div className="auth-divider">{t('auth.orEmail')}</div>
+              </div>
+            )}
+            <form onSubmit={submit} className="stack">
+              <label>
+                {t('auth.email')}
+                <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required />
+              </label>
+              {mode !== 'forgot' && (
+                <label>
+                  {t('auth.password')}
+                  <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required />
+                </label>
+              )}
+              {mode === 'register' && (
+                <label>
+                  {t('auth.name')}
+                  <input value={name} onChange={(e) => setName(e.target.value)} required />
+                </label>
+              )}
+              {error && <p className="error">{error}</p>}
+              <button className="btn btn-primary" type="submit" disabled={pending}>
+                {pending
+                  ? t('auth.waiting')
+                  : mode === 'forgot'
+                    ? t('auth.sendResetLink')
+                    : t('auth.continue')}
+              </button>
+            </form>
+            <div className="auth-links">
+              {mode !== 'login' && (
+                <button type="button" onClick={() => setMode('login')} className="link-btn">
+                  {t('auth.linkLogin')}
+                </button>
+              )}
+              {mode !== 'register' && (
+                <button type="button" onClick={() => setMode('register')} className="link-btn">
+                  {t('auth.linkRegister')}
+                </button>
+              )}
+              {mode !== 'forgot' && (
+                <button type="button" onClick={() => setMode('forgot')} className="link-btn">
+                  {t('auth.linkForgot')}
+                </button>
+              )}
+            </div>
+            {showGooglePrimary && emailFallbackOpen && (
+              <button
+                type="button"
+                className="auth-fallback-toggle auth-fallback-toggle-close"
+                onClick={() => {
+                  setEmailFallbackOpen(false)
+                  setMode('login')
+                  setError('')
+                }}
+              >
+                {t('auth.hideEmailLogin')}
+              </button>
+            )}
+          </>
+        )}
       </section>
     </main>
   )

@@ -18,6 +18,11 @@
     "waiting": "Please wait…",
     "sendResetLink": "Send reset link",
     "continue": "Continue",
+    "continueWithGoogle": "Continue with Google",
+    "orEmail": "or with email",
+    "adminPasswordHint": "For admin accounts or if you use email and password.",
+    "emailPasswordFallback": "Email and password (admin or backup)",
+    "hideEmailLogin": "Hide email sign-in",
     "linkLogin": "Log in",
     "linkRegister": "Create account",
     "linkForgot": "Forgot password"
