@@ -210,11 +210,34 @@ input {
   background: #0f172a;
 }
 
+.rides-share-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  line-height: 1.35;
+}
+
 .ride-item {
   border: 1px solid #334155;
   border-radius: 12px;
   padding: 0.7rem;
   margin-top: 0.6rem;
+}
+
+.admin-user-actions {
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.admin-badge-blocked,
+.admin-badge-pw {
+  font-weight: normal;
+  font-size: 0.85rem;
+  color: #f87171;
+}
+
+.admin-badge-pw {
+  color: #fbbf24;
 }
 
 .row {

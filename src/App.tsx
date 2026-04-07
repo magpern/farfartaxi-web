@@ -45,6 +45,7 @@ type UserView = {
   fullName: string
   role: Role
   mustChangePassword: boolean
+  hasLocalPassword: boolean
 }
 
 type AuthResponse = {
@@ -599,7 +600,12 @@ function Dashboard({ auth, setAuth }: { auth: AuthResponse; setAuth: (a: AuthRes
           {(auth.user.role === 'DRIVER' || auth.user.role === 'ADMIN') && (
             <Route path="forare" element={<DriverPage token={auth.token} onToast={setToast} />} />
           )}
-          {auth.user.role === 'ADMIN' && <Route path="admin" element={<AdminPage token={auth.token} onToast={setToast} />} />}
+          {auth.user.role === 'ADMIN' && (
+            <Route
+              path="admin"
+              element={<AdminPage token={auth.token} currentUserId={auth.user.id} onToast={setToast} />}
+            />
+          )}
           <Route path="*" element={<Navigate to="/app" replace />} />
         </Routes>
         {menuOpen && (
@@ -1139,11 +1145,13 @@ function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) =
     return () => window.clearInterval(id)
   }, [])
 
-  async function cancel(rideId: number) {
+  async function cancel(rideId: number, status: string) {
+    const reason =
+      status === 'PENDING_OPEN' ? t('rides.cancelReason') : t('rides.cancelReasonAfterAccept')
     await api(`/api/rides/${rideId}/cancel`, {
       method: 'POST',
       token,
-      body: JSON.stringify({ reason: t('rides.cancelReason') })
+      body: JSON.stringify({ reason })
     })
     onToast(t('rides.cancelledToast'))
     load()
@@ -1173,6 +1181,16 @@ function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) =
   const canDeleteFromList = (ride: RideResponse) =>
     ride.status === 'CANCELLED' || ride.status === 'REJECTED'
 
+  const canPassengerCancel = (ride: RideResponse) =>
+    ride.status === 'PENDING_OPEN' ||
+    ride.status === 'ACCEPTED' ||
+    ride.status === 'IN_PROGRESS'
+
+  const canShareLiveTrip = (ride: RideResponse) =>
+    ride.status === 'PENDING_OPEN' ||
+    ride.status === 'ACCEPTED' ||
+    ride.status === 'IN_PROGRESS'
+
   return (
     <div className="subpage-wrap stack">
       <Link className="link-back" to="/app">
@@ -1180,6 +1198,7 @@ function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) =
       </Link>
       <div className="card">
         <h3>{t('rides.upcoming')}</h3>
+        <p className="rides-share-hint">{t('rides.shareTripHint')}</p>
         {upcoming.length === 0 && <p>{t('rides.noUpcoming')}</p>}
         {upcoming.map((ride) => (
           <article key={ride.id} className="ride-item">
@@ -1191,8 +1210,8 @@ function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) =
             </p>
             {ride.etaMinutes && <p>{t('rides.eta', { min: ride.etaMinutes })}</p>}
             <div className="row">
-              {ride.status === 'PENDING_OPEN' && (
-                <button onClick={() => cancel(ride.id)} className="btn">
+              {canPassengerCancel(ride) && (
+                <button type="button" onClick={() => cancel(ride.id, ride.status)} className="btn btn-danger">
                   {t('rides.cancel')}
                 </button>
               )}
@@ -1201,9 +1220,11 @@ function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) =
                   {t('rides.delete')}
                 </button>
               )}
-              <button onClick={() => share(ride.id)} className="btn">
-                {t('rides.shareTrip')}
-              </button>
+              {canShareLiveTrip(ride) && (
+                <button type="button" title={t('rides.shareTripHint')} onClick={() => share(ride.id)} className="btn">
+                  {t('rides.shareTrip')}
+                </button>
+              )}
             </div>
           </article>
         ))}
@@ -1240,16 +1261,19 @@ function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) =
 
 function DriverPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
   const { t, locale } = useI18n()
+  const [myRides, setMyRides] = useState<RideResponse[]>([])
   const [openRides, setOpenRides] = useState<RideResponse[]>([])
   const [stats, setStats] = useState<{ completedRides: number; acceptedRides: number } | null>(null)
   const watchId = useRef<number | null>(null)
   const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
 
   async function load() {
-    const [rides, statsRes] = await Promise.all([
+    const [mine, rides, statsRes] = await Promise.all([
+      api<RideResponse[]>('/api/driver/rides/mine', { token }),
       api<RideResponse[]>('/api/driver/rides/open', { token }),
       api<{ completedRides: number; acceptedRides: number }>('/api/driver/stats', { token })
     ])
+    setMyRides(mine)
     setOpenRides(rides)
     setStats(statsRes)
   }
@@ -1276,6 +1300,13 @@ function DriverPage({ token, onToast }: { token: string; onToast: (m: string) =>
       body: JSON.stringify({ comment: t('driver.refuseComment') })
     })
     onToast(t('driver.toastRefused'))
+    load()
+  }
+
+  async function unaccept(rideId: number) {
+    await api(`/api/driver/rides/${rideId}/unaccept`, { method: 'POST', token })
+    onToast(t('driver.toastUnaccept'))
+    load()
   }
 
   async function startDriving(rideId: number) {
@@ -1293,6 +1324,7 @@ function DriverPage({ token, onToast }: { token: string; onToast: (m: string) =>
         })
       })
     })
+    load()
   }
 
   async function complete(rideId: number) {
@@ -1359,6 +1391,40 @@ function DriverPage({ token, onToast }: { token: string; onToast: (m: string) =>
         )}
       </div>
       <div className="card">
+        <h3>{t('driver.myRides')}</h3>
+        {myRides.length === 0 && <p>{t('driver.noMyRides')}</p>}
+        {myRides.map((ride) => (
+          <article key={ride.id} className="ride-item">
+            <p>
+              <strong>{ride.fromAddress}</strong> {t('rides.toWord')} <strong>{ride.toAddress}</strong>
+            </p>
+            <p>
+              {formatLocaleDateTime24h(ride.scheduledAt, dateLocale)} — {ride.status}
+            </p>
+            {ride.etaMinutes != null && ride.etaMinutes > 0 && (
+              <p>{t('rides.eta', { min: ride.etaMinutes })}</p>
+            )}
+            <div className="row">
+              {ride.status === 'ACCEPTED' && (
+                <>
+                  <button type="button" className="btn btn-primary" onClick={() => startDriving(ride.id)}>
+                    {t('driver.startDriving')}
+                  </button>
+                  <button type="button" className="btn" onClick={() => unaccept(ride.id)}>
+                    {t('driver.unaccept')}
+                  </button>
+                </>
+              )}
+              {ride.status === 'IN_PROGRESS' && (
+                <button type="button" className="btn btn-primary" onClick={() => complete(ride.id)}>
+                  {t('driver.complete')}
+                </button>
+              )}
+            </div>
+          </article>
+        ))}
+      </div>
+      <div className="card">
         <h3>{t('driver.openRides')}</h3>
         {openRides.length === 0 && <p>{t('driver.noOpenRides')}</p>}
         {openRides.map((ride) => (
@@ -1368,17 +1434,11 @@ function DriverPage({ token, onToast }: { token: string; onToast: (m: string) =>
             </p>
             <p>{formatLocaleDateTime24h(ride.scheduledAt, dateLocale)}</p>
             <div className="row">
-              <button className="btn btn-primary" onClick={() => accept(ride.id)}>
+              <button type="button" className="btn btn-primary" onClick={() => accept(ride.id)}>
                 {t('driver.accept')}
               </button>
-              <button className="btn" onClick={() => refuse(ride.id)}>
+              <button type="button" className="btn" onClick={() => refuse(ride.id)}>
                 {t('driver.refuse')}
-              </button>
-              <button className="btn" onClick={() => startDriving(ride.id)}>
-                {t('driver.startDriving')}
-              </button>
-              <button className="btn" onClick={() => complete(ride.id)}>
-                {t('driver.complete')}
               </button>
             </div>
           </article>
@@ -1388,13 +1448,31 @@ function DriverPage({ token, onToast }: { token: string; onToast: (m: string) =>
   )
 }
 
-function AdminPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
+type AdminUserRow = {
+  id: number
+  fullName: string
+  email: string
+  role: string
+  mustChangePassword: boolean
+  hasLocalPassword: boolean
+  enabled: boolean
+}
+
+function AdminPage({
+  token,
+  currentUserId,
+  onToast
+}: {
+  token: string
+  currentUserId: number
+  onToast: (m: string) => void
+}) {
   const { t } = useI18n()
-  const [users, setUsers] = useState<Array<{ id: number; fullName: string; email: string; role: string }>>([])
+  const [users, setUsers] = useState<AdminUserRow[]>([])
   const [rideIdToDelete, setRideIdToDelete] = useState('')
 
   async function load() {
-    const list = await api<Array<{ id: number; fullName: string; email: string; role: string }>>('/api/admin/users', { token })
+    const list = await api<AdminUserRow[]>('/api/admin/users', { token })
     setUsers(list)
   }
 
@@ -1402,13 +1480,25 @@ function AdminPage({ token, onToast }: { token: string; onToast: (m: string) => 
     load()
   }, [])
 
-  async function promote(userId: number) {
+  async function promoteDriver(userId: number) {
     await api(`/api/admin/users/${userId}/promote-driver`, { method: 'POST', token })
     onToast(t('admin.toastPromoted'))
     load()
   }
 
-  async function demote(userId: number) {
+  async function promoteAdmin(userId: number) {
+    await api(`/api/admin/users/${userId}/promote-admin`, { method: 'POST', token })
+    onToast(t('admin.toastPromotedAdmin'))
+    load()
+  }
+
+  async function demoteAdminToDriver(userId: number) {
+    await api(`/api/admin/users/${userId}/demote-admin-to-driver`, { method: 'POST', token })
+    onToast(t('admin.toastDemotedAdminToDriver'))
+    load()
+  }
+
+  async function demoteToUser(userId: number) {
     await api(`/api/admin/users/${userId}/demote-user`, { method: 'POST', token })
     onToast(t('admin.toastDemoted'))
     load()
@@ -1421,6 +1511,24 @@ function AdminPage({ token, onToast }: { token: string; onToast: (m: string) => 
       body: JSON.stringify({ mustChangePassword: true })
     })
     onToast(t('admin.toastForcePw'))
+    load()
+  }
+
+  async function setBlocked(userId: number, enabled: boolean) {
+    await api(`/api/admin/users/${userId}/enabled`, {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ enabled })
+    })
+    onToast(enabled ? t('admin.toastUnblocked') : t('admin.toastBlocked'))
+    load()
+  }
+
+  async function deleteUser(userId: number) {
+    if (!window.confirm(t('admin.deleteUserConfirm'))) return
+    await api(`/api/admin/users/${userId}`, { method: 'DELETE', token })
+    onToast(t('admin.toastUserDeleted'))
+    load()
   }
 
   async function deleteRide() {
@@ -1432,24 +1540,69 @@ function AdminPage({ token, onToast }: { token: string; onToast: (m: string) => 
     <div className="subpage-wrap stack">
       <div className="card">
         <h3>{t('admin.users')}</h3>
-        {users.map((u) => (
-          <article key={u.id} className="ride-item">
-            <p>
-              {u.fullName} ({u.email}) - {u.role}
-            </p>
-            <div className="row">
-              <button className="btn" onClick={() => promote(u.id)}>
-                {t('admin.promote')}
-              </button>
-              <button className="btn" onClick={() => demote(u.id)}>
-                {t('admin.demote')}
-              </button>
-              <button className="btn" onClick={() => forcePassword(u.id)}>
-                {t('admin.forcePassword')}
-              </button>
-            </div>
-          </article>
-        ))}
+        {users.map((u) => {
+          const isSelf = u.id === currentUserId
+          return (
+            <article key={u.id} className="ride-item">
+              <p>
+                <strong>{u.fullName}</strong> ({u.email}) — {u.role}
+                {!u.enabled && <span className="admin-badge-blocked"> {t('admin.blocked')}</span>}
+                {u.mustChangePassword && u.hasLocalPassword && (
+                  <span className="admin-badge-pw"> {t('admin.mustChangePwBadge')}</span>
+                )}
+              </p>
+              <div className="row admin-user-actions">
+                {u.role === 'USER' && (
+                  <button type="button" className="btn" onClick={() => promoteDriver(u.id)}>
+                    {t('admin.promote')}
+                  </button>
+                )}
+                {u.role !== 'ADMIN' && (
+                  <button type="button" className="btn" onClick={() => promoteAdmin(u.id)}>
+                    {t('admin.promoteAdmin')}
+                  </button>
+                )}
+                {u.role === 'ADMIN' && (
+                  <button type="button" className="btn" onClick={() => demoteAdminToDriver(u.id)} disabled={isSelf}>
+                    {t('admin.demoteAdminToDriver')}
+                  </button>
+                )}
+                {(u.role === 'DRIVER' || u.role === 'ADMIN') && (
+                  <button type="button" className="btn" onClick={() => demoteToUser(u.id)} disabled={isSelf}>
+                    {t('admin.demote')}
+                  </button>
+                )}
+                {u.hasLocalPassword && (
+                  <button type="button" className="btn" onClick={() => forcePassword(u.id)}>
+                    {t('admin.forcePassword')}
+                  </button>
+                )}
+                {u.enabled ? (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setBlocked(u.id, false)}
+                    disabled={isSelf}
+                  >
+                    {t('admin.blockUser')}
+                  </button>
+                ) : (
+                  <button type="button" className="btn btn-primary" onClick={() => setBlocked(u.id, true)}>
+                    {t('admin.unblockUser')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={() => deleteUser(u.id)}
+                  disabled={isSelf}
+                >
+                  {t('admin.deleteUser')}
+                </button>
+              </div>
+            </article>
+          )
+        })}
       </div>
       <div className="card">
         <h3>{t('admin.deleteRideTitle')}</h3>
@@ -1481,12 +1634,23 @@ function HelpPage() {
   )
 }
 
+function normalizeStoredAuth(parsed: AuthResponse): AuthResponse {
+  return {
+    ...parsed,
+    user: {
+      ...parsed.user,
+      hasLocalPassword:
+        typeof parsed.user.hasLocalPassword === 'boolean' ? parsed.user.hasLocalPassword : true
+    }
+  }
+}
+
 function useLocalAuth(): [AuthResponse | null, (next: AuthResponse | null) => void] {
   const [value, setValue] = useState<AuthResponse | null>(() => {
     const raw = localStorage.getItem('farfartaxi-auth')
     if (!raw) return null
     try {
-      return JSON.parse(raw) as AuthResponse
+      return normalizeStoredAuth(JSON.parse(raw) as AuthResponse)
     } catch {
       return null
     }
