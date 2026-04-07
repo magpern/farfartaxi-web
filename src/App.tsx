@@ -1148,13 +1148,18 @@ function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) =
   async function cancel(rideId: number, status: string) {
     const reason =
       status === 'PENDING_OPEN' ? t('rides.cancelReason') : t('rides.cancelReasonAfterAccept')
-    await api(`/api/rides/${rideId}/cancel`, {
-      method: 'POST',
-      token,
-      body: JSON.stringify({ reason })
-    })
-    onToast(t('rides.cancelledToast'))
-    load()
+    try {
+      await api(`/api/rides/${rideId}/cancel`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ reason })
+      })
+      onToast(t('rides.cancelledToast'))
+    } catch (err) {
+      onToast(getErrorMessage(err) || t('errors.generic'))
+    } finally {
+      await load()
+    }
   }
 
   async function share(rideId: number) {
