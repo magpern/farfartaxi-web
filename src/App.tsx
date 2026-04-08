@@ -785,6 +785,8 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
   /** True while the map is being moved by code (fitBounds, search pick, field recenter, GPS). */
   const programmaticCameraRef = useRef(false)
   const reverseGeocodeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  /** Aborts in-flight map-click reverse geocode when search pick or similar replaces coordinates. */
+  const mapClickReverseAbortRef = useRef<AbortController | null>(null)
   const lastStableMapCenterRef = useRef<{ lat: number; lng: number } | null>(null)
   /** Endpoint whose coordinates were last set (search pick, drag/reverse, or recenter) — used after route fitBounds. */
   const lastLocationSetRef = useRef<'from' | 'to'>('from')
@@ -829,49 +831,46 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
         lastStableMapCenterRef.current = { lat: cNow.lat, lng: cNow.lng }
       }
     })
-    const scheduleReverseAfterPan = () => {
-      if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
-      reverseGeocodeDebounceRef.current = window.setTimeout(() => {
-        reverseGeocodeDebounceRef.current = null
-        void (async () => {
-          const center = map.getCenter()
-          const field = activeFieldRef.current
-          try {
-            const url =
-              `${API_URL}/api/public/geocode/reverse?lat=${center.lat}&lon=${center.lng}` +
-              `&zoom=${REVERSE_GEOCODE_DETAIL_ZOOM}`
-            const res = await fetch(url, { headers: { Accept: 'application/json' } })
-            if (!res.ok) return
-            const data = (await res.json()) as NominatimResult
-            const address =
-              formatNominatimAddress(data) ||
-              data.display_name ||
-              `${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`
-            lastStableMapCenterRef.current = { lat: center.lat, lng: center.lng }
-            lastLocationSetRef.current = field
-            if (field === 'from') {
-              setDraft((d) => ({
-                ...d,
-                fromAddress: address,
-                fromLat: center.lat,
-                fromLon: center.lng
-              }))
-            } else {
-              setDraft((d) => ({
-                ...d,
-                toAddress: address,
-                toLat: center.lat,
-                toLon: center.lng
-              }))
-            }
-          } catch {
-            // no-op
+    /** Drag only pans; pick-up / destination is set by clicking the map (avoids fighting the Leaflet marker). */
+    map.on('click', (e: L.LeafletMouseEvent) => {
+      const latlng = e.latlng
+      const field = activeFieldRef.current
+      lastStableMapCenterRef.current = { lat: latlng.lat, lng: latlng.lng }
+      lastLocationSetRef.current = field
+      mapClickReverseAbortRef.current?.abort()
+      const ac = new AbortController()
+      mapClickReverseAbortRef.current = ac
+      if (field === 'from') {
+        setDraft((d) => ({ ...d, fromLat: latlng.lat, fromLon: latlng.lng }))
+      } else {
+        setDraft((d) => ({ ...d, toLat: latlng.lat, toLon: latlng.lng }))
+      }
+      void (async () => {
+        try {
+          const url =
+            `${API_URL}/api/public/geocode/reverse?lat=${latlng.lat}&lon=${latlng.lng}` +
+            `&zoom=${REVERSE_GEOCODE_DETAIL_ZOOM}`
+          const res = await fetch(url, {
+            signal: ac.signal,
+            headers: { Accept: 'application/json' }
+          })
+          if (!res.ok) return
+          const data = (await res.json()) as NominatimResult
+          const address =
+            formatNominatimAddress(data) ||
+            data.display_name ||
+            `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`
+          if (field !== activeFieldRef.current) return
+          if (field === 'from') {
+            setDraft((d) => ({ ...d, fromAddress: address, fromLat: latlng.lat, fromLon: latlng.lng }))
+          } else {
+            setDraft((d) => ({ ...d, toAddress: address, toLat: latlng.lat, toLon: latlng.lng }))
           }
-        })()
-      }, 550)
-    }
-    map.on('dragend', () => {
-      scheduleReverseAfterPan()
+        } catch (err) {
+          const name = err instanceof Error ? err.name : ''
+          if (name === 'AbortError') return
+        }
+      })()
     })
 
     const addressPinIcon = L.divIcon({
@@ -912,6 +911,8 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
     }
 
     return () => {
+      mapClickReverseAbortRef.current?.abort()
+      mapClickReverseAbortRef.current = null
       if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
       reverseGeocodeDebounceRef.current = null
       addressPinRef.current = null
@@ -994,7 +995,8 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
             color: '#38bdf8',
             weight: 5,
             opacity: 0.9,
-            lineJoin: 'round'
+            lineJoin: 'round',
+            interactive: false
           }).addTo(map)
           routeLineRef.current = line
           setRoadRoute({ km: rte.distance / 1000, min: Math.max(1, Math.round(rte.duration / 60)) })
@@ -1085,6 +1087,7 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
       clearTimeout(reverseGeocodeDebounceRef.current)
       reverseGeocodeDebounceRef.current = null
     }
+    mapClickReverseAbortRef.current?.abort()
     programmaticCameraRef.current = true
     skipReverseOnMoveEndRef.current = true
     m.setView([lat, lon], m.getZoom())
@@ -1100,6 +1103,7 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
     const lon = Number(item.lon)
     if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
     reverseGeocodeDebounceRef.current = null
+    mapClickReverseAbortRef.current?.abort()
     programmaticCameraRef.current = true
     skipReverseOnMoveEndRef.current = true
     mapRef.current?.setView([lat, lon], 15)

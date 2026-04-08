@@ -594,6 +594,7 @@ button.drawer-link {
 .map-hero .leaflet-container {
   height: 100%;
   background: #0f172a;
+  cursor: crosshair;
 }
 
 .booking-sheet {
