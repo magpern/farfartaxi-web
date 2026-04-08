@@ -259,29 +259,40 @@ input {
   min-height: 280px;
 }
 
-.center-pin {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 20px;
-  height: 20px;
-  margin-left: -10px;
-  margin-top: -20px;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(-45deg);
-  background: #ef4444;
-  z-index: 1000;
+/* Booking map: Leaflet divIcon — tip at iconAnchor (see App.tsx iconAnchor). */
+.leaflet-div-icon.booking-pin-leaflet {
+  background: transparent !important;
+  border: none !important;
+}
+
+.booking-pin-wrap {
+  position: relative;
+  width: 28px;
+  height: 40px;
   pointer-events: none;
 }
 
-.center-pin::after {
+.booking-pin-shape {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 20px;
+  height: 20px;
+  margin-left: -10px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: #ef4444;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.booking-pin-shape::after {
   content: "";
+  position: absolute;
   width: 9px;
   height: 9px;
   margin: 5px 0 0 5px;
   background: #f8fafc;
   border-radius: 50%;
-  position: absolute;
 }
 
 .search-list {

@@ -85,6 +85,9 @@ const API_URL = import.meta.env.DEV
   ? ''
   : (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
 
+/** Nominatim reverse zoom: keep fixed for stable labels. */
+const REVERSE_GEOCODE_DETAIL_ZOOM = 18
+
 /** Geocoding is proxied by the backend (`/api/public/geocode/*`) so the browser avoids CORS and shared rate limits. */
 
 type NominatimResult = {
@@ -176,6 +179,23 @@ function formatNominatimAddress(payload: NominatimResult | { display_name?: stri
   if (joined) return joined
   if (poiName && !area) return poiName
   return payload.display_name ?? ''
+}
+
+/** Nominatim often returns several OSM hits for the same street (segments); same formatted label → one row. */
+function dedupeNominatimResults(items: NominatimResult[]): NominatimResult[] {
+  const seen = new Set<string>()
+  const out: NominatimResult[] = []
+  for (const item of items) {
+    const label = (formatNominatimAddress(item) || item.display_name)
+      .normalize('NFC')
+      .trim()
+      .replace(/\s+/g, ' ')
+    const key = label.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(item)
+  }
+  return out
 }
 
 function formatYmdHm(iso: string) {
@@ -745,6 +765,11 @@ function SideMenu({
   )
 }
 
+/** Dev-only diagnostics for Leaflet zoom / recenter (filter console by `[booking-map]`). */
+function logBookingMap(...args: unknown[]) {
+  if (import.meta.env.DEV) console.debug('[booking-map]', ...args)
+}
+
 function BookingPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
   const { t } = useI18n()
   const navigate = useNavigate()
@@ -753,9 +778,16 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
   draftRef.current = draft
   const mapRef = useRef<L.Map | null>(null)
   const routeLineRef = useRef<L.Polyline | null>(null)
-  /** Skip one moveend reverse-geocode after programmatic map moves (search pick, GPS, route fitBounds). */
+  /** Geographic pin for the active field (not a fixed screen overlay — stays on lat/lng when zooming). */
+  const addressPinRef = useRef<L.Marker | null>(null)
+  /** Skip one moveend handler side-effects after programmatic setView (consumed on next moveend). */
   const skipReverseOnMoveEndRef = useRef(false)
+  /** True while the map is being moved by code (fitBounds, search pick, field recenter, GPS). */
+  const programmaticCameraRef = useRef(false)
   const reverseGeocodeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastStableMapCenterRef = useRef<{ lat: number; lng: number } | null>(null)
+  /** Endpoint whose coordinates were last set (search pick, drag/reverse, or recenter) — used after route fitBounds. */
+  const lastLocationSetRef = useRef<'from' | 'to'>('from')
   const mapNode = useRef<HTMLDivElement | null>(null)
   const activeFieldRef = useRef<'from' | 'to'>('from')
   const [activeField, setActiveField] = useState<'from' | 'to'>('from')
@@ -786,20 +818,28 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map)
+    {
+      const c0 = map.getCenter()
+      lastStableMapCenterRef.current = { lat: c0.lat, lng: c0.lng }
+    }
     map.on('moveend', () => {
+      const cNow = map.getCenter()
       if (skipReverseOnMoveEndRef.current) {
         skipReverseOnMoveEndRef.current = false
-        return
+        lastStableMapCenterRef.current = { lat: cNow.lat, lng: cNow.lng }
       }
+    })
+    const scheduleReverseAfterPan = () => {
       if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
       reverseGeocodeDebounceRef.current = window.setTimeout(() => {
         reverseGeocodeDebounceRef.current = null
         void (async () => {
           const center = map.getCenter()
           const field = activeFieldRef.current
-          const zoom = Math.min(18, Math.max(1, Math.round(map.getZoom())))
           try {
-            const url = `${API_URL}/api/public/geocode/reverse?lat=${center.lat}&lon=${center.lng}&zoom=${zoom}`
+            const url =
+              `${API_URL}/api/public/geocode/reverse?lat=${center.lat}&lon=${center.lng}` +
+              `&zoom=${REVERSE_GEOCODE_DETAIL_ZOOM}`
             const res = await fetch(url, { headers: { Accept: 'application/json' } })
             if (!res.ok) return
             const data = (await res.json()) as NominatimResult
@@ -807,6 +847,8 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
               formatNominatimAddress(data) ||
               data.display_name ||
               `${center.lat.toFixed(5)}, ${center.lng.toFixed(5)}`
+            lastStableMapCenterRef.current = { lat: center.lat, lng: center.lng }
+            lastLocationSetRef.current = field
             if (field === 'from') {
               setDraft((d) => ({
                 ...d,
@@ -827,7 +869,25 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
           }
         })()
       }, 550)
+    }
+    map.on('dragend', () => {
+      scheduleReverseAfterPan()
     })
+
+    const addressPinIcon = L.divIcon({
+      className: 'booking-pin-leaflet',
+      html: '<div class="booking-pin-wrap"><div class="booking-pin-shape"></div></div>',
+      iconSize: [28, 40],
+      iconAnchor: [14, 40],
+      popupAnchor: [0, -36]
+    })
+    addressPinRef.current = L.marker([initFromLat, initFromLon], {
+      icon: addressPinIcon,
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 600
+    }).addTo(map)
+
     mapRef.current = map
 
     if (bothAddressesEmpty && typeof navigator !== 'undefined' && navigator.geolocation) {
@@ -837,8 +897,12 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
           if (!m) return
           const { latitude, longitude } = pos.coords
           if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return
+          programmaticCameraRef.current = true
           skipReverseOnMoveEndRef.current = true
           m.setView([latitude, longitude], 17)
+          window.setTimeout(() => {
+            programmaticCameraRef.current = false
+          }, 80)
         },
         () => {
           /* keep default map center; permission denied or timeout */
@@ -850,11 +914,25 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
     return () => {
       if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
       reverseGeocodeDebounceRef.current = null
+      addressPinRef.current = null
       map.remove()
       mapRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- map init only on mount; do not recreate when draft updates
   }, [setDraft])
+
+  useEffect(() => {
+    const marker = addressPinRef.current
+    if (!marker) return
+    const lat = activeField === 'from' ? draft.fromLat : draft.toLat
+    const lon = activeField === 'from' ? draft.fromLon : draft.toLon
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      marker.setOpacity(0)
+      return
+    }
+    marker.setLatLng([lat, lon])
+    marker.setOpacity(1)
+  }, [activeField, draft.fromLat, draft.fromLon, draft.toLat, draft.toLon])
 
   useEffect(() => {
     const map = mapRef.current
@@ -865,6 +943,12 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
         map.removeLayer(routeLineRef.current)
         routeLineRef.current = null
       }
+    }
+
+    if (!draft.fromAddress.trim() || !draft.toAddress.trim()) {
+      clearRouteLine()
+      setRoadRoute(null)
+      return
     }
 
     const { fromLat, fromLon, toLat, toLon } = draft
@@ -918,8 +1002,33 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
           if (d.fromAddress.trim().length > 0 && d.toAddress.trim().length > 0) {
             if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
             reverseGeocodeDebounceRef.current = null
+            programmaticCameraRef.current = true
             skipReverseOnMoveEndRef.current = true
+            logBookingMap('route fitBounds start; zoom recenter suppressed until fit + pan complete')
             map.fitBounds(line.getBounds(), { padding: [32, 32], maxZoom: 15 })
+            let routeCameraDone = false
+            const finishRouteCamera = () => {
+              if (routeCameraDone) return
+              routeCameraDone = true
+              const field = lastLocationSetRef.current
+              const cur = draftRef.current
+              const lat = field === 'from' ? cur.fromLat : cur.toLat
+              const lon = field === 'from' ? cur.fromLon : cur.toLon
+              logBookingMap(
+                `route camera: moveend/fallback — pan to lastLocationSet=${field} → [${Number.isFinite(lat) ? lat.toFixed(5) : '?'},${Number.isFinite(lon) ? lon.toFixed(5) : '?'}]`
+              )
+              if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                skipReverseOnMoveEndRef.current = true
+                map.panTo([lat, lon], { animate: false, noMoveStart: true })
+                lastStableMapCenterRef.current = { lat, lng: lon }
+              }
+              window.setTimeout(() => {
+                programmaticCameraRef.current = false
+                logBookingMap('programmaticCamera cleared — user zoom will recenter again')
+              }, 80)
+            }
+            map.once('moveend', finishRouteCamera)
+            window.setTimeout(finishRouteCamera, 700)
           }
         } catch (e) {
           const name = e instanceof Error ? e.name : ''
@@ -939,7 +1048,7 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
         routeLineRef.current = null
       }
     }
-  }, [draft.fromLat, draft.fromLon, draft.toLat, draft.toLon])
+  }, [draft.fromAddress, draft.toAddress, draft.fromLat, draft.fromLon, draft.toLat, draft.toLon])
 
   useEffect(() => {
     const id = setTimeout(async () => {
@@ -948,25 +1057,57 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
         setSearchResults([])
         return
       }
-      const url = `${API_URL}/api/public/geocode/search?q=${encodeURIComponent(q)}&limit=5&countrycodes=se`
-      const res = await fetch(url, { headers: { Accept: 'application/json' } })
-      if (!res.ok) {
+      const url = `${API_URL}/api/public/geocode/search?q=${encodeURIComponent(q)}&limit=10&countrycodes=se`
+      try {
+        const res = await fetch(url, { headers: { Accept: 'application/json' } })
+        if (!res.ok) {
+          setSearchResults([])
+          return
+        }
+        const data = (await res.json()) as NominatimResult[]
+        const list = Array.isArray(data) ? dedupeNominatimResults(data).slice(0, 5) : []
+        setSearchResults(list)
+      } catch {
         setSearchResults([])
-        return
       }
-      const data = (await res.json()) as NominatimResult[]
-      setSearchResults(Array.isArray(data) ? data : [])
     }, 350)
     return () => clearTimeout(id)
   }, [query])
+
+  function recenterMapOnField(field: 'from' | 'to') {
+    const m = mapRef.current
+    if (!m) return
+    const d = draftRef.current
+    const lat = field === 'from' ? d.fromLat : d.toLat
+    const lon = field === 'from' ? d.fromLon : d.toLon
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return
+    if (reverseGeocodeDebounceRef.current != null) {
+      clearTimeout(reverseGeocodeDebounceRef.current)
+      reverseGeocodeDebounceRef.current = null
+    }
+    programmaticCameraRef.current = true
+    skipReverseOnMoveEndRef.current = true
+    m.setView([lat, lon], m.getZoom())
+    lastStableMapCenterRef.current = { lat, lng: lon }
+    lastLocationSetRef.current = field
+    window.setTimeout(() => {
+      programmaticCameraRef.current = false
+    }, 80)
+  }
 
   function applySearchResult(item: NominatimResult) {
     const lat = Number(item.lat)
     const lon = Number(item.lon)
     if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
     reverseGeocodeDebounceRef.current = null
+    programmaticCameraRef.current = true
     skipReverseOnMoveEndRef.current = true
     mapRef.current?.setView([lat, lon], 15)
+    lastStableMapCenterRef.current = { lat, lng: lon }
+    lastLocationSetRef.current = activeField
+    window.setTimeout(() => {
+      programmaticCameraRef.current = false
+    }, 80)
     const label = formatNominatimAddress(item) || item.display_name
     if (activeField === 'from') {
       setDraft((d) => ({ ...d, fromAddress: label, fromLat: lat, fromLon: lon }))
@@ -1015,7 +1156,6 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
   return (
     <div className="booking-layout">
       <div className="map-hero">
-        <div className="center-pin" aria-hidden />
         <div ref={mapNode} className="map map-hero-map" />
       </div>
       <div className="booking-sheet">
@@ -1032,6 +1172,7 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
                 onFocus={() => {
                   setActiveField('from')
                   setQuery(draft.fromAddress)
+                  recenterMapOnField('from')
                 }}
                 onChange={(e) => {
                   setActiveField('from')
@@ -1060,6 +1201,7 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
                 onFocus={() => {
                   setActiveField('to')
                   setQuery(draft.toAddress)
+                  recenterMapOnField('to')
                 }}
                 onChange={(e) => {
                   setActiveField('to')
@@ -1083,8 +1225,8 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
         </div>
         {searchResults.length > 0 && query.normalize('NFC').trim().length >= 3 && (
           <ul className="search-list sheet-search">
-            {searchResults.map((item) => (
-              <li key={`${item.lat}-${item.lon}-${item.display_name}`}>
+            {searchResults.map((item, idx) => (
+              <li key={`${item.lat}-${item.lon}-${idx}`}>
                 <button type="button" onClick={() => applySearchResult(item)}>
                   {formatNominatimAddress(item) || item.display_name}
                 </button>
