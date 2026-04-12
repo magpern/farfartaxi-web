@@ -181,6 +181,7 @@
   },
   "errors": {
     "generic": "Något gick fel",
+    "sessionExpired": "Din session har gått ut. Logga in igen.",
     "bookingFuture": "Välj ett datum och tid i framtiden.",
     "bookingFailed": "Kunde inte boka: {{message}}"
   },

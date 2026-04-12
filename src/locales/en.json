@@ -181,6 +181,7 @@
   },
   "errors": {
     "generic": "Something went wrong",
+    "sessionExpired": "Your session has expired. Please log in again.",
     "bookingFuture": "Choose a date and time in the future.",
     "bookingFailed": "Could not book: {{message}}"
   },

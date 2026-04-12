@@ -6,6 +6,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState
@@ -235,6 +236,8 @@ const defaultDraft: BookingDraft = {
 }
 
 const BOOKING_DRAFT_STORAGE_KEY = 'farfartaxi-booking-draft'
+/** One-shot flag so /login can show session-expired copy after proactive logout. */
+const SESSION_EXPIRED_LOGIN_FLASH = 'farfartaxi-session-expired-flash'
 
 function readBookingDraftFromStorage(): BookingDraft | null {
   if (typeof sessionStorage === 'undefined') return null
@@ -269,6 +272,59 @@ function writeBookingDraftToStorage(d: BookingDraft) {
   }
 }
 
+/** JWT `exp` is seconds since epoch; used so we do not treat an expired token as a logged-in session. */
+function isJwtExpired(token: string, skewMs = 60_000): boolean {
+  const parts = token.split('.')
+  if (parts.length < 2) return true
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+    const payload = JSON.parse(atob(padded)) as { exp?: number }
+    if (payload.exp == null || typeof payload.exp !== 'number') return true
+    return Date.now() >= payload.exp * 1000 - skewMs
+  } catch {
+    return true
+  }
+}
+
+function markSessionExpiredLoginFlash() {
+  try {
+    sessionStorage.setItem(SESSION_EXPIRED_LOGIN_FLASH, '1')
+  } catch {
+    /* ignore */
+  }
+}
+
+function notifySessionExpiredLogin(setAuth: Dispatch<SetStateAction<AuthResponse | null>>) {
+  markSessionExpiredLoginFlash()
+  setAuth(null)
+}
+
+/** While the user is in the app (including booking / förboka), re-check often so expiry is caught before submit. */
+function useSessionExpiryWatch(token: string, setAuth: Dispatch<SetStateAction<AuthResponse | null>>) {
+  useLayoutEffect(() => {
+    if (isJwtExpired(token)) {
+      notifySessionExpiredLogin(setAuth)
+    }
+  }, [token, setAuth])
+
+  useEffect(() => {
+    const intervalMs = 5_000
+    const id = window.setInterval(() => {
+      if (isJwtExpired(token)) {
+        notifySessionExpiredLogin(setAuth)
+      }
+    }, intervalMs)
+    return () => window.clearInterval(id)
+  }, [token, setAuth])
+}
+
+let sessionExpiredHandler: (() => void) | undefined
+
+function registerSessionExpiredHandler(handler: (() => void) | undefined) {
+  sessionExpiredHandler = handler
+}
+
 const BookingDraftContext = createContext<{
   draft: BookingDraft
   setDraft: Dispatch<SetStateAction<BookingDraft>>
@@ -294,6 +350,31 @@ function App() {
 
 function ProtectedApp() {
   const [auth, setAuth] = useLocalAuth()
+
+  useLayoutEffect(() => {
+    if (auth && isJwtExpired(auth.token)) {
+      notifySessionExpiredLogin(setAuth)
+    }
+  }, [auth, setAuth])
+
+  useEffect(() => {
+    registerSessionExpiredHandler(() => notifySessionExpiredLogin(setAuth))
+    return () => registerSessionExpiredHandler(undefined)
+  }, [setAuth])
+
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return
+      setAuth((prev) => {
+        if (!prev || !isJwtExpired(prev.token)) return prev
+        markSessionExpiredLoginFlash()
+        return null
+      })
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [setAuth])
+
   if (!auth) {
     return <Navigate to="/login" replace />
   }
@@ -329,6 +410,17 @@ function AuthPage() {
   const [emailFallbackOpen, setEmailFallbackOpen] = useState(false)
   const googleBtnRef = useRef<HTMLDivElement>(null)
   const googleInitRef = useRef(false)
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(SESSION_EXPIRED_LOGIN_FLASH) === '1') {
+        sessionStorage.removeItem(SESSION_EXPIRED_LOGIN_FLASH)
+        setError(t('errors.sessionExpired'))
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [t])
 
   const showGooglePrimary = Boolean(googleClientId) && mode !== 'forgot'
   const showEmailPanel = !googleClientId || mode === 'forgot' || emailFallbackOpen
@@ -567,8 +659,15 @@ function AuthPage() {
   )
 }
 
-function Dashboard({ auth, setAuth }: { auth: AuthResponse; setAuth: (a: AuthResponse | null) => void }) {
+function Dashboard({
+  auth,
+  setAuth
+}: {
+  auth: AuthResponse
+  setAuth: Dispatch<SetStateAction<AuthResponse | null>>
+}) {
   const { t } = useI18n()
+  useSessionExpiryWatch(auth.token, setAuth)
   const [toast, setToast] = useState('')
   const [toastVisible, setToastVisible] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -1986,21 +2085,29 @@ function normalizeStoredAuth(parsed: AuthResponse): AuthResponse {
   }
 }
 
-function useLocalAuth(): [AuthResponse | null, (next: AuthResponse | null) => void] {
+function useLocalAuth(): [AuthResponse | null, Dispatch<SetStateAction<AuthResponse | null>>] {
   const [value, setValue] = useState<AuthResponse | null>(() => {
     const raw = localStorage.getItem('farfartaxi-auth')
     if (!raw) return null
     try {
-      return normalizeStoredAuth(JSON.parse(raw) as AuthResponse)
+      const parsed = normalizeStoredAuth(JSON.parse(raw) as AuthResponse)
+      if (isJwtExpired(parsed.token)) {
+        localStorage.removeItem('farfartaxi-auth')
+        return null
+      }
+      return parsed
     } catch {
       return null
     }
   })
-  const set = (next: AuthResponse | null) => {
-    setValue(next)
-    if (!next) localStorage.removeItem('farfartaxi-auth')
-    else localStorage.setItem('farfartaxi-auth', JSON.stringify(next))
-  }
+  const set = useCallback((next: SetStateAction<AuthResponse | null>) => {
+    setValue((prev) => {
+      const resolved = typeof next === 'function' ? (next as (p: AuthResponse | null) => AuthResponse | null)(prev) : next
+      if (!resolved) localStorage.removeItem('farfartaxi-auth')
+      else localStorage.setItem('farfartaxi-auth', JSON.stringify(resolved))
+      return resolved
+    })
+  }, [])
   return [value, set]
 }
 
@@ -2018,6 +2125,9 @@ async function api<T = unknown>(
     body: opts.body
   })
   if (!response.ok) {
+    if (response.status === 401 && opts.token) {
+      sessionExpiredHandler?.()
+    }
     let text = `Request failed (${response.status})`
     try {
       const payload = (await response.json()) as { error?: string }
@@ -2057,6 +2167,9 @@ function bookingApiErrorMessage(
   const msg = getErrorMessage(err)
   if (!msg) return t('errors.generic')
   const lower = msg.toLowerCase()
+  if (lower.includes('(401)') || lower.includes('401') || lower.includes('not authenticated')) {
+    return t('errors.sessionExpired')
+  }
   if (lower.includes('future') || lower.includes('scheduledat')) {
     return t('errors.bookingFuture')
   }
