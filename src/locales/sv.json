@@ -55,7 +55,15 @@
     "routingAttribution": "Rutt: OSRM / OpenStreetMap · demo-tjänst, ej för hög belastning.",
     "forboka": "Förboka",
     "akaNu": "Åka nu",
-    "fillBoth": "Fyll i både start och destination."
+    "fillBoth": "Fyll i både start och destination.",
+    "behalfTitle": "Vem gäller bokningen?",
+    "behalfLead": "Välj den registrerade användare som resan ska ligga under.",
+    "onBehalfOf": "På uppdrag av",
+    "behalfSelf": "— Mig själv —",
+    "behalfLoading": "Hämtar användare…",
+    "behalfCancel": "Avbryt",
+    "behalfContinue": "Fortsätt",
+    "forPassenger": "Passagerare"
   },
   "prebook": {
     "back": "Tillbaka",

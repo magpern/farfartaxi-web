@@ -79,6 +79,12 @@ type RideResponse = {
   lastLocationAt: string | null
 }
 
+type BookingUserOption = {
+  id: number
+  fullName: string
+  email: string
+}
+
 // In dev, always use same-origin `/api/...` so Vite's proxy reaches the backend.
 // A set VITE_API_URL (e.g. http://localhost:8080) bypasses the proxy and often causes
 // net::ERR_CONNECTION_REFUSED if the browser cannot reach that host:port.
@@ -224,6 +230,8 @@ type BookingDraft = {
   toAddress: string
   toLat: number
   toLon: number
+  /** When set, a driver books the ride for this registered passenger. */
+  passengerUserId?: number
 }
 
 const defaultDraft: BookingDraft = {
@@ -251,7 +259,7 @@ function readBookingDraftFromStorage(): BookingDraft | null {
     const toLat = Number(o.toLat)
     const toLon = Number(o.toLon)
     if (![fromLat, fromLon, toLat, toLon].every(Number.isFinite)) return null
-    return {
+    const out: BookingDraft = {
       fromAddress: o.fromAddress,
       toAddress: o.toAddress,
       fromLat,
@@ -259,6 +267,11 @@ function readBookingDraftFromStorage(): BookingDraft | null {
       toLat,
       toLon
     }
+    if (o.passengerUserId != null) {
+      const pid = Number(o.passengerUserId)
+      if (Number.isFinite(pid)) out.passengerUserId = pid
+    }
+    return out
   } catch {
     return null
   }
@@ -270,6 +283,22 @@ function writeBookingDraftToStorage(d: BookingDraft) {
   } catch {
     /* quota / private mode */
   }
+}
+
+function buildRideBookPayload(draft: BookingDraft, scheduledAtIso: string): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    fromAddress: draft.fromAddress,
+    fromLat: draft.fromLat,
+    fromLon: draft.fromLon,
+    toAddress: draft.toAddress,
+    toLat: draft.toLat,
+    toLon: draft.toLon,
+    scheduledAt: scheduledAtIso
+  }
+  if (typeof draft.passengerUserId === 'number' && Number.isFinite(draft.passengerUserId)) {
+    body.passengerUserId = draft.passengerUserId
+  }
+  return body
 }
 
 /** JWT `exp` is seconds since epoch; used so we do not treat an expired token as a logged-in session. */
@@ -740,8 +769,8 @@ function Dashboard({
         )}
         {/* Paths are relative to parent `/app/*`: remaining URL after `/app` is matched (e.g. `/` → index). */}
         <Routes>
-          <Route index element={<BookingPage token={auth.token} onToast={setToast} />} />
-          <Route path="forboka" element={<PreBookPage token={auth.token} onToast={setToast} />} />
+          <Route index element={<BookingPage token={auth.token} currentUser={auth.user} onToast={setToast} />} />
+          <Route path="forboka" element={<PreBookPage token={auth.token} currentUser={auth.user} onToast={setToast} />} />
           <Route path="bekraftelse" element={<BookingConfirmPage />} />
           <Route path="resor" element={<MyRidesPage token={auth.token} onToast={setToast} />} />
           <Route path="hjalp" element={<HelpPage />} />
@@ -869,10 +898,22 @@ function logBookingMap(...args: unknown[]) {
   if (import.meta.env.DEV) console.debug('[booking-map]', ...args)
 }
 
-function BookingPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
+function BookingPage({
+  token,
+  currentUser,
+  onToast
+}: {
+  token: string
+  currentUser: UserView
+  onToast: (m: string) => void
+}) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const { draft, setDraft, clearBookingDraft } = useBookingDraft()
+  const isDriver = currentUser.role === 'DRIVER'
+  const [behalfAction, setBehalfAction] = useState<'forboka' | 'akaNu' | null>(null)
+  const [modalPassengerId, setModalPassengerId] = useState('')
+  const [bookingUsers, setBookingUsers] = useState<BookingUserOption[] | null>(null)
   const draftRef = useRef(draft)
   draftRef.current = draft
   const mapRef = useRef<L.Map | null>(null)
@@ -894,6 +935,23 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
   const [activeField, setActiveField] = useState<'from' | 'to'>('from')
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<NominatimResult[]>([])
+
+  useEffect(() => {
+    if (!isDriver || behalfAction === null) return
+    let cancelled = false
+    setBookingUsers(null)
+    void (async () => {
+      try {
+        const list = await api<BookingUserOption[]>('/api/users/for-booking', { token })
+        if (!cancelled) setBookingUsers(Array.isArray(list) ? list : [])
+      } catch {
+        if (!cancelled) setBookingUsers([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isDriver, behalfAction, token])
 
   activeFieldRef.current = activeField
 
@@ -1221,9 +1279,58 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
     setQuery('')
   }
 
+  function openBehalfModal(action: 'forboka' | 'akaNu') {
+    setModalPassengerId(draft.passengerUserId != null ? String(draft.passengerUserId) : '')
+    setBehalfAction(action)
+  }
+
+  function cancelBehalfModal() {
+    setBehalfAction(null)
+  }
+
+  async function submitAkaNu(d: BookingDraft) {
+    const scheduledAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
+    try {
+      const ride = await api<RideResponse>('/api/rides', {
+        method: 'POST',
+        token,
+        body: JSON.stringify(buildRideBookPayload(d, scheduledAt))
+      })
+      clearBookingDraft()
+      navigate('/app/bekraftelse', { state: { ride } })
+    } catch (err) {
+      onToast(bookingApiErrorMessage(err, t))
+    }
+  }
+
+  function confirmBehalfModal() {
+    if (behalfAction === null) return
+    const raw = modalPassengerId.trim()
+    const payloadDraft: BookingDraft = { ...draft }
+    if (raw === '') {
+      delete payloadDraft.passengerUserId
+    } else {
+      const id = Number(raw)
+      if (!Number.isFinite(id)) return
+      payloadDraft.passengerUserId = id
+    }
+    setDraft(payloadDraft)
+    const action = behalfAction
+    setBehalfAction(null)
+    if (action === 'forboka') {
+      navigate('/app/forboka')
+    } else {
+      void submitAkaNu(payloadDraft)
+    }
+  }
+
   function goForboka() {
     if (!draft.fromAddress.trim() || !draft.toAddress.trim()) {
       onToast(t('booking.fillBoth'))
+      return
+    }
+    if (isDriver) {
+      openBehalfModal('forboka')
       return
     }
     navigate('/app/forboka')
@@ -1234,26 +1341,11 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
       onToast(t('booking.fillBoth'))
       return
     }
-    const scheduledAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
-    try {
-      const ride = await api<RideResponse>('/api/rides', {
-        method: 'POST',
-        token,
-        body: JSON.stringify({
-          fromAddress: draft.fromAddress,
-          fromLat: draft.fromLat,
-          fromLon: draft.fromLon,
-          toAddress: draft.toAddress,
-          toLat: draft.toLat,
-          toLon: draft.toLon,
-          scheduledAt
-        })
-      })
-      clearBookingDraft()
-      navigate('/app/bekraftelse', { state: { ride } })
-    } catch (err) {
-      onToast(bookingApiErrorMessage(err, t))
+    if (isDriver) {
+      openBehalfModal('akaNu')
+      return
     }
+    await submitAkaNu(draft)
   }
 
   return (
@@ -1352,14 +1444,96 @@ function BookingPage({ token, onToast }: { token: string; onToast: (m: string) =
           </button>
         </div>
       </div>
+      {isDriver && behalfAction !== null && (
+        <div
+          className="install-modal-layer"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="behalf-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) cancelBehalfModal()
+          }}
+        >
+          <div className="card install-modal-card" onClick={(e) => e.stopPropagation()}>
+            <h3 id="behalf-title">{t('booking.behalfTitle')}</h3>
+            <p className="install-modal-lead">{t('booking.behalfLead')}</p>
+            <label className="behalf-modal-label" htmlFor="behalf-select">
+              {t('booking.onBehalfOf')}
+            </label>
+            {bookingUsers === null ? (
+              <p className="tiny muted">{t('booking.behalfLoading')}</p>
+            ) : (
+              <select
+                id="behalf-select"
+                className="sheet-input behalf-modal-select"
+                value={modalPassengerId}
+                onChange={(e) => setModalPassengerId(e.target.value)}
+              >
+                <option value="">{t('booking.behalfSelf')}</option>
+                {bookingUsers.map((u) => (
+                  <option key={u.id} value={String(u.id)}>
+                    {u.fullName} ({u.email})
+                  </option>
+                ))}
+              </select>
+            )}
+            <div className="install-modal-actions">
+              <button type="button" className="btn btn-outline" onClick={cancelBehalfModal}>
+                {t('booking.behalfCancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={bookingUsers === null}
+                onClick={confirmBehalfModal}
+              >
+                {t('booking.behalfContinue')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function PreBookPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
+function PreBookPage({
+  token,
+  currentUser,
+  onToast
+}: {
+  token: string
+  currentUser: UserView
+  onToast: (m: string) => void
+}) {
   const { t, locale, ta } = useI18n()
   const navigate = useNavigate()
   const { draft, clearBookingDraft } = useBookingDraft()
+  const isDriver = currentUser.role === 'DRIVER'
+  const [behalfPassengerLabel, setBehalfPassengerLabel] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!isDriver || draft.passengerUserId == null) {
+      setBehalfPassengerLabel(null)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const raw = await api<BookingUserOption[]>('/api/users/for-booking', { token })
+        if (cancelled) return
+        const list = Array.isArray(raw) ? raw : []
+        const u = list.find((x) => x.id === draft.passengerUserId)
+        setBehalfPassengerLabel(u ? `${u.fullName} (${u.email})` : `#${draft.passengerUserId}`)
+      } catch {
+        if (!cancelled) setBehalfPassengerLabel(`#${draft.passengerUserId}`)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [isDriver, draft.passengerUserId, token])
+
   const [cursor, setCursor] = useState(() => {
     const d = new Date(Date.now() + 60 * 60 * 1000)
     return new Date(d.getFullYear(), d.getMonth(), d.getDate())
@@ -1416,15 +1590,7 @@ function PreBookPage({ token, onToast }: { token: string; onToast: (m: string) =
       const ride = await api<RideResponse>('/api/rides', {
         method: 'POST',
         token,
-        body: JSON.stringify({
-          fromAddress: draft.fromAddress,
-          fromLat: draft.fromLat,
-          fromLon: draft.fromLon,
-          toAddress: draft.toAddress,
-          toLat: draft.toLat,
-          toLon: draft.toLon,
-          scheduledAt: when.toISOString()
-        })
+        body: JSON.stringify(buildRideBookPayload(draft, when.toISOString()))
       })
       clearBookingDraft()
       navigate('/app/bekraftelse', { state: { ride } })
@@ -1443,6 +1609,11 @@ function PreBookPage({ token, onToast }: { token: string; onToast: (m: string) =
         </button>
         <h1 className="prebook-title">{t('prebook.title')}</h1>
         <p className="prebook-sub">{t('prebook.subtitle')}</p>
+        {isDriver && draft.passengerUserId != null && (
+          <p className="prebook-behalf tiny">
+            <strong>{t('booking.forPassenger')}:</strong> {behalfPassengerLabel ?? '…'}
+          </p>
+        )}
       </header>
       <p className="prebook-bigdate">{bigLabel}</p>
       <div className="calendar-nav">

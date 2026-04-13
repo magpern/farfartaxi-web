@@ -368,6 +368,22 @@ input {
   margin-top: 1rem;
 }
 
+.behalf-modal-label {
+  display: block;
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.9rem;
+  color: #cbd5e1;
+}
+
+.behalf-modal-select {
+  margin-bottom: 0.25rem;
+}
+
+.prebook-behalf {
+  margin: 0.75rem 0 0;
+  color: #cbd5e1;
+}
+
 .help-install-callout {
   margin-bottom: 1.25rem;
   padding: 1rem;

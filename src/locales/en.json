@@ -55,7 +55,15 @@
     "routingAttribution": "Route: OSRM / OpenStreetMap · demo service, not for heavy use.",
     "forboka": "Pre-book",
     "akaNu": "Go now",
-    "fillBoth": "Enter both pickup and destination."
+    "fillBoth": "Enter both pickup and destination.",
+    "behalfTitle": "Who is this booking for?",
+    "behalfLead": "Choose the registered user the ride should belong to.",
+    "onBehalfOf": "On behalf of",
+    "behalfSelf": "— Myself —",
+    "behalfLoading": "Loading users…",
+    "behalfCancel": "Cancel",
+    "behalfContinue": "Continue",
+    "forPassenger": "Passenger"
   },
   "prebook": {
     "back": "Back",
