@@ -413,6 +413,11 @@ input {
   pointer-events: none;
 }
 
+/* No tab bar (driving mode, pre-book, confirmation): anchor the toast to the bottom edge, clear of the main buttons. */
+body:not(:has(.tabbar)) .toast-floating {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem);
+}
+
 .toast-floating-visible {
   opacity: 1;
 }
