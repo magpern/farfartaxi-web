@@ -25,36 +25,38 @@ afterEach(() => {
 })
 
 describe('ShareRideButton', () => {
-  it('uses the native share sheet when available', async () => {
-    const share = vi.fn(() => Promise.resolve())
-    Object.defineProperty(navigator, 'share', { configurable: true, value: share })
-    show({ prefetch: true })
-    await waitFor(() => expect(apiMock).toHaveBeenCalledTimes(1))
-    await act(async () => {})
-    await userEvent.click(screen.getByRole('button', { name: 'Dela resan' }))
-    expect(share).toHaveBeenCalledWith({ title: 'Farfartaxi', text: 'Följ min resa', url: 'https://farfartaxi.pernemark.se/dela/abc' })
-    expect(apiMock).toHaveBeenCalledTimes(1) // the link was created up front, not on tap
-    expect(apiMock).toHaveBeenCalledWith('/api/rides/7/share', expect.objectContaining({ method: 'POST' }))
-  })
-
-  it('without a prefetched link, creates it and asks for a second explicit tap', async () => {
+  it('does not create a link on mount; first tap POSTs, second tap shares synchronously', async () => {
     const share = vi.fn(() => Promise.resolve())
     Object.defineProperty(navigator, 'share', { configurable: true, value: share })
     show()
+    await act(async () => {})
+    expect(apiMock).not.toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Sluta dela' })).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Dela resan' }))
+    expect(apiMock).toHaveBeenCalledWith('/api/rides/7/share', expect.objectContaining({ method: 'POST' }))
     const second = await screen.findByRole('button', { name: 'Dela länken' })
     expect(share).not.toHaveBeenCalled()
     await userEvent.click(second)
-    expect(share).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://farfartaxi.pernemark.se/dela/abc' }))
+    expect(share).toHaveBeenCalledWith({ title: 'Farfartaxi', text: 'Följ min resa', url: 'https://farfartaxi.pernemark.se/dela/abc' })
     expect(await screen.findByRole('button', { name: 'Sluta dela' })).toBeInTheDocument()
+  })
+
+  it('with shareActive already true, the first tap still just POSTs and offers "Dela länken"', async () => {
+    show({ shareActive: true })
+    await act(async () => {})
+    expect(apiMock).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Dela resan' }))
+    expect(await screen.findByRole('button', { name: 'Dela länken' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sluta dela' })).toBeInTheDocument()
+    expect(apiMock).toHaveBeenCalledTimes(1)
   })
 
   it('falls back to the clipboard with a toast', async () => {
     const user = userEvent.setup()
     const spy = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
-    show({ prefetch: true })
-    await act(async () => {})
+    show()
     await user.click(screen.getByRole('button', { name: 'Dela resan' }))
+    await user.click(await screen.findByRole('button', { name: 'Dela länken' }))
     await waitFor(() => expect(spy).toHaveBeenCalledWith('https://farfartaxi.pernemark.se/dela/abc'))
     expect(toast).toHaveBeenCalledWith('Delningslänk kopierad.')
   })
@@ -62,9 +64,9 @@ describe('ShareRideButton', () => {
   it('does not toast when the user closes the share sheet', async () => {
     const share = vi.fn(() => Promise.reject(new DOMException('x', 'AbortError')))
     Object.defineProperty(navigator, 'share', { configurable: true, value: share })
-    show({ prefetch: true })
-    await act(async () => {})
+    show()
     await userEvent.click(screen.getByRole('button', { name: 'Dela resan' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Dela länken' }))
     await waitFor(() => expect(share).toHaveBeenCalled())
     expect(toast).not.toHaveBeenCalled()
   })
