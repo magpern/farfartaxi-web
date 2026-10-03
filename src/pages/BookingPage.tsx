@@ -449,12 +449,35 @@ export function BookingPage() {
     return true
   }
 
+  /**
+   * "Min position" is only a display default: before booking, swap it for a real label so the driver never sees it.
+   * Reverse geocode -> "Nära <stop>" -> "Min position (GPS) lat, lon".
+   */
+  async function resolveMyPosition(): Promise<boolean> {
+    const d = draftRef.current
+    if (d.fromAddress !== t('placeSearch.myPosition')) return true
+    const { fromLat: lat, fromLon: lon } = d
+    let label: string | null = null
+    try {
+      label = (await reversePlace(token, lat, lon))?.formattedAddress || null
+    } catch {
+      label = null
+    }
+    if (!label && stop) label = t('placeSearch.nearStop', { name: stop.name })
+    if (!label) label = t('placeSearch.gpsFallback', { lat: lat.toFixed(5), lon: lon.toFixed(5) })
+    const resolved = label
+    setDraft((cur) => (cur.fromAddress === t('placeSearch.myPosition') ? { ...cur, fromAddress: resolved } : cur))
+    return true
+  }
+
   function goForboka() {
-    if (validateDraft()) navigate('/app/forboka')
+    if (!validateDraft()) return
+    void resolveMyPosition().then(() => navigate('/app/forboka'))
   }
 
   function bookAkaNu() {
-    if (validateDraft()) setSheetOpen(true)
+    if (!validateDraft()) return
+    void resolveMyPosition().then(() => setSheetOpen(true))
   }
 
   function editFromSheet(field: BookingEditField) {

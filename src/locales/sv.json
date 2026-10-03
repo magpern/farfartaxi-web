@@ -465,6 +465,8 @@
     "myPosition": "📍 Min position",
     "selectedPlace": "Vald plats",
     "hereStop": "📍 Här ({{name}}, {{dist}})",
-    "useStop": "Använd hållplatsen som start"
+    "useStop": "Använd hållplatsen som start",
+    "nearStop": "Nära {{name}}",
+    "gpsFallback": "Min position (GPS) {{lat}}, {{lon}}"
   }
 }

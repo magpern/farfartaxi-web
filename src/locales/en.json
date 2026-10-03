@@ -465,6 +465,8 @@
     "myPosition": "📍 My position",
     "selectedPlace": "Selected place",
     "hereStop": "📍 Here ({{name}}, {{dist}})",
-    "useStop": "Use the stop as pickup"
+    "useStop": "Use the stop as pickup",
+    "nearStop": "Near {{name}}",
+    "gpsFallback": "My position (GPS) {{lat}}, {{lon}}"
   }
 }

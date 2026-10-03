@@ -142,4 +142,55 @@ describe('BookingPage places', () => {
     await tap(59.31, 18.01)
     expect([draftNow.fromAddress, draftNow.fromLat, draftNow.fromLon]).toEqual(['Vald plats', 59.31, 18.01])
   })
+
+  describe('"Min position" is resolved before booking', () => {
+    async function bookWith(reverse: () => Response, stop: Response) {
+      stubGeolocation('ok')
+      const f = mockFetch(
+        (u) => (u.pathname === '/api/places/nearest-stop' ? stop : undefined),
+        (u) => (u.pathname === '/api/places/reverse' ? reverse() : undefined),
+        (u, init) => (u.pathname === '/api/rides' && init?.method === 'POST' ? json({ id: 5, passengerId: 1 }) : undefined)
+      )
+      renderApp(<Wrapper />)
+      await flush()
+      expect(screen.getByLabelText('Startadress')).toHaveValue('📍 Min position')
+      fireEvent.change(screen.getByLabelText('Destination'), { target: { value: 'Skolan' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Åka nu' }))
+      await flush()
+      return f
+    }
+    const sheetPickup = () => screen.getByRole('dialog').textContent ?? ''
+    const postedFrom = (f: ReturnType<typeof mockFetch>) => {
+      const post = f.mock.calls.find((c) => String(c[0]).includes('/api/rides') && c[1]?.method === 'POST')
+      return JSON.parse(String(post?.[1]?.body)).fromAddress
+    }
+
+    it('1. reverse geocode label', async () => {
+      const f = await bookWith(
+        () => json({ provider: 'NOMINATIM', providerPlaceId: null, kind: 'ADDRESS', name: 'Sveavägen 12', area: 'Stockholm', formattedAddress: 'Sveavägen 12, Stockholm', lat: 59.4, lon: 17.8, distanceKm: null }),
+        json(STOP)
+      )
+      expect(sheetPickup()).toContain('Sveavägen 12, Stockholm')
+      expect(sheetPickup()).not.toContain('Min position')
+      fireEvent.click(screen.getByRole('button', { name: /^Ja/ }))
+      await flush()
+      expect(postedFrom(f)).toBe('Sveavägen 12, Stockholm')
+    })
+
+    it('2. reverse fails (429): "Nära <stop>"', async () => {
+      const f = await bookWith(() => json({ error: 'slow' }, 429), json(STOP))
+      expect(sheetPickup()).toContain('Nära Kallhälls station')
+      fireEvent.click(screen.getByRole('button', { name: /^Ja/ }))
+      await flush()
+      expect(postedFrom(f)).toBe('Nära Kallhälls station')
+    })
+
+    it('3. reverse 204 and no stop: "Min position (GPS)" with 5-decimal coordinates', async () => {
+      const f = await bookWith(() => noContent(), noContent())
+      expect(sheetPickup()).toContain('Min position (GPS) 59.40000, 17.80000')
+      fireEvent.click(screen.getByRole('button', { name: /^Ja/ }))
+      await flush()
+      expect(postedFrom(f)).toBe('Min position (GPS) 59.40000, 17.80000')
+    })
+  })
 })
