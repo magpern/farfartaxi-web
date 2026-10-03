@@ -81,4 +81,25 @@ describe('ride cards are driven by availableActions', () => {
     expect(screen.getByText('Lisa')).toBeInTheDocument()
     vi.restoreAllMocks()
   })
+
+  it('driver request card shows a mini map and priority marker; return is a clear secondary action', () => {
+    localStorage.setItem('farfartaxi-locale', 'sv')
+    const { rerender } = render(
+      <I18nProvider>
+        <DriverRideCard
+          ride={ride('REQUESTED', ['ACCEPT', 'DECLINE'], { offerPriority: true, fromLat: 59.33, fromLon: 18.07, toLat: 59.34, toLon: 18.09 })}
+          token="t" userId={1} onToast={noop} onChanged={noop}
+        />
+      </I18nProvider>
+    )
+    expect(screen.getByTestId('mini-map')).toBeInTheDocument()
+    expect(screen.getByText('Ändrad resa')).toBeInTheDocument()
+    rerender(
+      <I18nProvider>
+        <DriverRideCard ride={ride('ACCEPTED', ['RETURN', 'START'])} token="t" userId={1} onToast={noop} onChanged={noop} />
+      </I18nProvider>
+    )
+    expect(screen.queryByTestId('mini-map')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Lämna tillbaka resa' })).toBeInTheDocument()
+  })
 })

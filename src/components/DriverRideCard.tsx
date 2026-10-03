@@ -2,6 +2,7 @@ import { useI18n } from '../i18n/context'
 import { DRIVER_MESSAGE_CODES, hasAction, smsHref, telHref, type RideResponse } from '../lib/rideTypes'
 import { formatWeekdayDateTime } from '../lib/time'
 import { useRideMessages } from '../lib/rideMessages'
+import { MiniMap } from './MiniMap'
 import { QuickMessages } from './QuickMessages'
 import { RideMessages } from './RideMessages'
 import { DRIVER_STEPS, useDriverRideActions } from './rideActions'
@@ -28,11 +29,17 @@ export function DriverRideCard({ ride, token, userId, onToast, onChanged, onOpen
   const messages = useRideMessages(ride, token)
   const a = useDriverRideActions({ ride, token, onToast, onChanged })
   const hasProgress = DRIVER_STEPS.some((p) => hasAction(ride, p.action))
+  const isRequest = hasAction(ride, 'ACCEPT')
   const firstName = ride.passengerName?.split(' ')[0] || t('driver.passengerFallback')
 
   return (
     <article className={`ride-item driver-ride ${ride.urgent ? 'ride-urgent' : ''}`}>
-      {ride.urgent && <p className="badge-urgent">{t('driver.urgent')}</p>}
+      {(ride.urgent || ride.offerPriority) && (
+        <p className="driver-badges">
+          {ride.urgent && <span className="badge-urgent">{t('driver.urgent')}</span>}
+          {ride.offerPriority && <span className="badge-priority">{t('driver.priority')}</span>}
+        </p>
+      )}
       <p className="driver-ride-who">
         {ride.passengerName ? t('driver.passenger', { name: ride.passengerName }) : t('driver.passengerFallback')}
       </p>
@@ -40,6 +47,9 @@ export function DriverRideCard({ ride, token, userId, onToast, onChanged, onOpen
       <p className="driver-ride-route">
         <strong>{ride.fromAddress}</strong> {t('rides.toWord')} <strong>{ride.toAddress}</strong>
       </p>
+      {isRequest && (
+        <MiniMap fromLat={ride.fromLat} fromLon={ride.fromLon} toLat={ride.toLat} toLon={ride.toLon} label={t('driver.mapAria')} />
+      )}
       <p>
         <StatusPill status={ride.status} perspective="driver" />
       </p>
@@ -67,11 +77,6 @@ export function DriverRideCard({ ride, token, userId, onToast, onChanged, onOpen
             {t('driver.cannot')}
           </Button>
         )}
-        {hasAction(ride, 'RETURN') && (
-          <Button size="lg" disabled={a.busy} onClick={() => a.setReturning(true)}>
-            {t('driver.giveBack')}
-          </Button>
-        )}
         {onOpen && ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'PICKED_UP'].includes(ride.status) && (
           <Button size="lg" onClick={() => onOpen(ride.id)}>
             {t('driver.openDriving')}
@@ -88,6 +93,11 @@ export function DriverRideCard({ ride, token, userId, onToast, onChanged, onOpen
           </>
         )}
       </div>
+      {hasAction(ride, 'RETURN') && (
+        <Button size="lg" block variant="ghost" className="give-back" disabled={a.busy} onClick={() => a.setReturning(true)}>
+          {t('driver.giveBackRide')}
+        </Button>
+      )}
       <RideMessages messages={messages} isMine={(m) => m.senderId === userId} otherName={firstName} />
       {hasAction(ride, 'MESSAGE') && (
         <QuickMessages codes={DRIVER_MESSAGE_CODES} large disabled={a.busy} onSend={(c) => void a.sendMessage(c)} />
