@@ -4,9 +4,11 @@ import { BrowserRouter } from 'react-router-dom'
 import { I18nProvider } from './i18n/context'
 import App from './App'
 import { initPwa } from './pwa'
+import { initTelemetry } from './lib/telemetry'
 import './style.css'
 
 initPwa()
+initTelemetry()
 
 ReactDOM.createRoot(document.getElementById('app')!).render(
   <React.StrictMode>

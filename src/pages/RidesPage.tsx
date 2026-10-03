@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { setBookingSource } from '../lib/telemetry'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import { useI18n } from '../i18n/context'
@@ -124,6 +125,7 @@ export function RidesPage() {
     r.status === 'COMPLETED' && saved.places !== null && !saved.places.some((p) => haversine(p.lat, p.lon, r.toLat, r.toLon) < 0.03)
 
   function rebook(r: RideResponse) {
+    setBookingSource('rebook')
     setDraft({
       ...defaultDraft,
       fromAddress: r.fromAddress,

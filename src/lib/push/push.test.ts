@@ -3,6 +3,7 @@ import { mockFetch, json, noContent, calls } from '../../test/fetchMock'
 import { getPermission, isIos, isStandalone, pushSupported } from './env'
 import { shouldShowIosInstallGuide, snoozeIosInstallGuide, IOS_INSTALL_SNOOZE_MS } from './installGuide'
 import { getNotificationPrefs, putNotificationPrefs, syncLocale } from './prefs'
+import { __queueSnapshot, __resetTelemetry } from '../telemetry'
 import { ensureSubscribed, subscribe, unsubscribeOnLogout, urlBase64ToUint8Array } from './subscription'
 
 const KEY_B64 = 'BAUF' // 3 bytes -> 4 chars
@@ -80,6 +81,13 @@ describe('environment detection', () => {
 })
 
 describe('subscribe', () => {
+  it('emits push_permission with the prompt result', async () => {
+    __resetTelemetry()
+    installPush()
+    request.mockResolvedValueOnce('denied')
+    await subscribe('tok')
+    expect(__queueSnapshot().map((e) => [e.name, e.props])).toEqual([['push_permission', { state: 'denied' }]])
+  })
   it('requests permission, subscribes with the server key and posts the payload', async () => {
     installPush()
     const f = mockFetch(...routes)

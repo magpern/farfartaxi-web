@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { useI18n } from '../i18n/context'
 import type { BookingUserOption } from '../lib/useBookingUsers'
 import { formatWeekdayDateTime } from '../lib/time'
+import { getBookingSource, track } from '../lib/telemetry'
 import type { BookingEditField } from './bookingFocus'
 import { BottomSheet } from './ui/BottomSheet'
 import { Button } from './ui/Button'
@@ -56,6 +57,10 @@ export function BookingConfirmSheet({ open, busy, onClose, onConfirm, who, whoPi
   const { t, locale } = useI18n()
   const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
   const whenText = formatWeekdayDateTime(when.iso, dateLocale)
+  const nowKind = when.now
+  useEffect(() => {
+    if (open) track('booking_started', { kind: nowKind ? 'NOW' : 'SCHEDULED', source: getBookingSource() })
+  }, [open, nowKind])
   const edit = (labelKey: string) => t('bookingConfirm.editAria', { what: t(labelKey) })
   return (
     <BottomSheet
