@@ -257,7 +257,9 @@
     "manualAndroid": "Android: öppna menyn (⋮) och välj «Installera app» eller «Lägg till på startskärmen».",
     "manualDesktop": "Dator: använd installera-ikonen i adressfältet eller menyn (t.ex. «Installera Farfartaxi» / «Appar»).",
     "helpCalloutTitle": "Lägg till på hemskärmen",
-    "helpCalloutLead": "Öppna menyn (☰) och välj «Lägg till på hemskärmen», eller följ anvisningarna för din enhet nedan."
+    "helpCalloutLead": "Öppna menyn (☰) och välj «Lägg till på hemskärmen», eller följ anvisningarna för din enhet nedan.",
+    "newVersion": "Ny version finns",
+    "update": "Uppdatera"
   },
   "help": {
     "title": "Hjälp och vanliga frågor",
@@ -336,5 +338,11 @@
     "placeholder": "T.ex. blå dörr, ring på porttelefonen",
     "count": "{{n}}/280",
     "show": "Meddelande: {{note}}"
+  },
+  "network": {
+    "offline": "Ingen anslutning",
+    "unreachable": "Kunde inte nå servern — försöker igen",
+    "actionFailed": "Kunde inte nå servern — försök igen",
+    "lastUpdated": "Senast uppdaterad {{time}}"
   }
 }

@@ -257,7 +257,9 @@
     "manualAndroid": "Android: open the menu (⋮) and choose “Install app” or “Add to Home screen”.",
     "manualDesktop": "Desktop: use the install icon in the address bar or the browser menu (e.g. “Install Farfartaxi” / Apps).",
     "helpCalloutTitle": "Add to Home Screen",
-    "helpCalloutLead": "Open the menu (☰) and choose “Add to Home Screen”, or follow the steps for your device below."
+    "helpCalloutLead": "Open the menu (☰) and choose “Add to Home Screen”, or follow the steps for your device below.",
+    "newVersion": "A new version is available",
+    "update": "Update"
   },
   "help": {
     "title": "Help & FAQ",
@@ -336,5 +338,11 @@
     "placeholder": "E.g. blue door, use the intercom",
     "count": "{{n}}/280",
     "show": "Message: {{note}}"
+  },
+  "network": {
+    "offline": "No connection",
+    "unreachable": "Couldn't reach the server — retrying",
+    "actionFailed": "Couldn't reach the server — please try again",
+    "lastUpdated": "Last updated {{time}}"
   }
 }
