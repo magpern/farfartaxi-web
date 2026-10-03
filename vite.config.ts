@@ -12,20 +12,26 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
+        strategies: 'injectManifest',
+        srcDir: 'src',
+        filename: 'sw.ts',
         registerType: 'prompt',
+        injectManifest: { globPatterns: ['**/*.{js,css,html,svg,png,woff2}'] },
         manifest: {
+          id: '/',
           name: 'Farfartaxi',
           short_name: 'Farfartaxi',
           description: 'Family taxi booking app',
-          theme_color: '#111827',
-          background_color: '#111827',
+          lang: 'sv',
+          start_url: '/app',
+          scope: '/',
           display: 'standalone',
+          theme_color: '#1d4ed8',
+          background_color: '#1d4ed8',
           icons: [
-            {
-              src: '/favicon.svg',
-              sizes: '192x192',
-              type: 'image/svg+xml'
-            }
+            { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
           ]
         }
       })

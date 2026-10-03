@@ -9,6 +9,7 @@ import { AvailabilityToggle, AwayDates } from '../components/DriverAvailability'
 import { useAvailability } from '../lib/useAvailability'
 import { DriverRideCard } from '../components/DriverRideCard'
 import { LastUpdated } from '../components/LastUpdated'
+import { NotificationPrompt } from '../components/NotificationPrompt'
 import { Button, Card } from '../components/ui'
 import { useActiveRide } from '../shell/ActiveRide'
 import { useShell } from '../shell/ShellContext'
@@ -71,6 +72,7 @@ export function DriverHomePage() {
     <div className="subpage-wrap stack driver-home">
       <AvailabilityToggle state={availability} />
       <h1 className="page-title">{t('tabs.requests')}</h1>
+      <NotificationPrompt />
 
       {driverActive && (
         <ActiveRideCard

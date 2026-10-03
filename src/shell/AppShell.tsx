@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { FARFARTAXI_PWA_INSTALL_SESSION_KEY, isStandalonePwa, PwaInstallModal } from '../PwaInstallModal'
 import { Toast } from '../components/ui'
+import { ensureSubscribed, shouldShowIosInstallGuide, unsubscribeOnLogout, useLocaleSync } from '../lib/push'
 import {
   BOOKING_DRAFT_STORAGE_KEY,
   defaultDraft,
@@ -52,6 +53,13 @@ export function AppShell({
   const [pwaInstallOpen, setPwaInstallOpen] = useState(false)
   const [draft, setDraft] = useState<BookingDraft>(() => readBookingDraftFromStorage() ?? defaultDraft)
   const { large, setLarge } = useLargeText(user.id, user.role)
+  useLocaleSync(token, user.id)
+
+  // Permission already granted: make sure this device still has a valid subscription and the server knows it.
+  useEffect(() => {
+    void ensureSubscribed(token)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per app start / user
+  }, [user.id])
 
   useEffect(() => {
     writeBookingDraftToStorage(draft)
@@ -59,6 +67,10 @@ export function AppShell({
 
   useEffect(() => {
     if (isStandalonePwa()) return
+    if (shouldShowIosInstallGuide()) {
+      setPwaInstallOpen(true)
+      return
+    }
     try {
       if (sessionStorage.getItem(FARFARTAXI_PWA_INSTALL_SESSION_KEY) === '1') setPwaInstallOpen(true)
     } catch {
@@ -84,6 +96,7 @@ export function AppShell({
       /* ignore */
     }
     clearRideCaches()
+    await unsubscribeOnLogout(token) // best effort, bounded; must run while the token is still valid
     await logoutRemote(token)
     setAuth(null)
   }, [token, setAuth])

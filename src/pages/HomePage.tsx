@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useI18n } from '../i18n/context'
 import { ActiveRideCard } from '../components/ActiveRideCard'
+import { NotificationPrompt } from '../components/NotificationPrompt'
 import { Button } from '../components/ui'
 import { useActiveRide } from '../shell/ActiveRide'
 import { useBookingDraft } from '../shell/BookingDraftContext'
@@ -26,6 +27,7 @@ export function HomePage() {
   // One stable tree: the booking form (map, draft) must not remount when the ride card appears/disappears.
   return (
     <div className={ride ? 'subpage-wrap stack' : undefined}>
+      <NotificationPrompt />
       {ride && (
         <>
           <ActiveRideCard

@@ -1,28 +1,19 @@
 import { useState } from 'react'
 import { useI18n } from '../i18n/context'
 import { isIos, getMapChoice, setMapChoice, type MapApp } from '../lib/navigation'
-import { enablePush } from '../lib/pushSetup'
-import { apiErrorMessage } from '../lib/apiErrors'
+import { NotificationSettings } from '../components/NotificationSettings'
 import { Button, ButtonLink, Card } from '../components/ui'
 import { useShell } from '../shell/ShellContext'
 import { isDriverRole } from '../shell/types'
 
 export function MorePage() {
   const { t, locale, setLocale } = useI18n()
-  const { user, token, onToast, largeText, setLargeText, showInstall, openInstall, logout } = useShell()
+  const { user, largeText, setLargeText, showInstall, openInstall, logout } = useShell()
 
   const [mapApp, setMapApp] = useState<MapApp | null>(() => getMapChoice())
   const chooseMap = (a: MapApp | null) => {
     setMapChoice(a)
     setMapApp(a)
-  }
-
-  async function push() {
-    try {
-      onToast(await enablePush(token, t))
-    } catch (err) {
-      onToast(apiErrorMessage(err, t))
-    }
   }
 
   return (
@@ -52,6 +43,8 @@ export function MorePage() {
         </label>
       </Card>
 
+      <NotificationSettings />
+
       {isDriverRole(user.role) && isIos() && (
         <Card>
           <h2 className="section-title">{t('navigate.settingTitle')}</h2>
@@ -73,11 +66,6 @@ export function MorePage() {
         {showInstall && (
           <Button size="lg" block onClick={openInstall}>
             {t('menu.installApp')}
-          </Button>
-        )}
-        {isDriverRole(user.role) && (
-          <Button size="lg" block onClick={() => void push()}>
-            {t('driver.enablePush')}
           </Button>
         )}
         {isDriverRole(user.role) && (

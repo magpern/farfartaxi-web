@@ -1774,3 +1774,21 @@ a.link-back {
 .driving-mode .ride-messages {
   font-size: 1.15rem;
 }
+
+.install-ios-steps {
+  font-size: 1.05rem;
+  display: grid;
+  gap: 0.75rem;
+}
+.share-icon {
+  vertical-align: -5px;
+  color: #60a5fa;
+}
+.push-card {
+  margin-bottom: 0.75rem;
+}
+.push-card-actions {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
