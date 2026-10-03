@@ -9,6 +9,7 @@ import { usePassengerRideActions } from './rideActions'
 import { Button } from './ui/Button'
 import { ConfirmDialog } from './ui/ConfirmDialog'
 import { StatusPill } from './ui/StatusPill'
+import { ShareRideButton } from './ShareRideButton'
 
 type Props = {
   ride: RideResponse
@@ -18,14 +19,15 @@ type Props = {
   onToast: (m: string) => void
   /** Reload the ride lists (called after every action, success or failure). */
   onChanged: () => Promise<void> | void
-  onShare?: (rideId: number) => void
   onDelete?: (rideId: number) => void
   /** Open the full ride screen. */
   onOpen?: (rideId: number) => void
 }
 
 /** Passenger view of one ride. Every button comes from `ride.availableActions`, never from status checks. */
-export function PassengerRideCard({ ride, token, userId, onToast, onChanged, onShare, onDelete, onOpen }: Props) {
+const SHAREABLE = ['REQUESTED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'PICKED_UP']
+
+export function PassengerRideCard({ ride, token, userId, onToast, onChanged, onDelete, onOpen }: Props) {
   const { t, locale } = useI18n()
   const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
   const messages = useRideMessages(ride, token)
@@ -78,9 +80,7 @@ export function PassengerRideCard({ ride, token, userId, onToast, onChanged, onS
             {t('rides.cancel')}
           </Button>
         )}
-        {onShare && ride.status !== 'COMPLETED' && ride.status !== 'CANCELLED' && (
-          <Button onClick={() => onShare(ride.id)}>{t('rides.shareTrip')}</Button>
-        )}
+        {SHAREABLE.includes(ride.status) && <ShareRideButton rideId={ride.id} token={token} onToast={onToast} shareActive={ride.shareActive} />}
         {onDelete && ride.status === 'CANCELLED' && (
           <Button variant="danger" onClick={() => onDelete(ride.id)}>
             {t('rides.delete')}

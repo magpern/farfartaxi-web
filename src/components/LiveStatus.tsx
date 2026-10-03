@@ -1,5 +1,6 @@
+import { useRef } from 'react'
 import { useI18n } from '../i18n/context'
-import { relativeAgo, secondsSince, staleState, statusLine, type EtaTarget } from '../lib/liveTracking'
+import { FIRST_FIX_GRACE_MS, relativeAgo, secondsSince, staleState, statusLine, type EtaTarget } from '../lib/liveTracking'
 import { useNow } from '../lib/useNow'
 
 /** "Folke" -> "Folkes" (sv; no extra s after s/x/z) / "Folke's" (en). */
@@ -14,19 +15,23 @@ type Props = {
   etaMinutes?: number | null
   lastLocationAt: string | null | undefined
   locationStale?: boolean | null
+  /** Server clock minus client clock (ms), when known; keeps "updated n s ago" right on a skewed phone clock. */
+  serverOffsetMs?: number
   /** Driver's first name. */
   name: string
 }
 
 /** Big status/ETA line, ticking "updated n s ago" and the stale-position warning. */
-export function LiveStatus({ status, etaTarget, etaMinutes, lastLocationAt, locationStale, name }: Props) {
+export function LiveStatus({ status, etaTarget, etaMinutes, lastLocationAt, locationStale, serverOffsetMs = 0, name }: Props) {
   const { t, locale } = useI18n()
   const now = useNow()
+  const mountedAt = useRef(now)
   const line = statusLine(status, etaTarget, etaMinutes)
   if (!line) return null
-  const secs = secondsSince(lastLocationAt, now)
+  const secs = secondsSince(lastLocationAt, now, serverOffsetMs)
   const ago = secs === null ? null : relativeAgo(secs)
-  const stale = staleState(status, locationStale, lastLocationAt, now)
+  const waiting = secs === null && status === 'EN_ROUTE' && now - mountedAt.current < FIRST_FIX_GRACE_MS
+  const stale = waiting ? null : staleState(status, locationStale, lastLocationAt, now, serverOffsetMs)
   return (
     <div className="live-status">
       <p className="live-status-line" data-testid="live-status-line">
@@ -35,6 +40,11 @@ export function LiveStatus({ status, etaTarget, etaMinutes, lastLocationAt, loca
       {ago && (
         <p className="live-status-ago muted" data-testid="live-ago">
           {t(ago.key, { n: ago.n })}
+        </p>
+      )}
+      {waiting && (
+        <p className="live-status-ago muted" data-testid="live-waiting">
+          {t('live.waiting', { nameGen: possessive(name, locale) })}
         </p>
       )}
       {stale && (

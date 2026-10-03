@@ -601,6 +601,11 @@
     "shareStatus": {
       "COMPLETED": "The ride is finished.",
       "CANCELLED": "The ride was cancelled."
-    }
+    },
+    "shareLink": "Share the link",
+    "waiting": "Waiting for {{nameGen}} position…",
+    "locationDenied": "Location access is blocked – {{name}} cannot see you on the map.",
+    "locationDeniedIos": "Open Settings → Privacy & Security → Location Services → Safari (or Farfartaxi) and choose “While Using”.",
+    "locationDeniedAndroid": "Open the site settings for this page in your browser (lock icon in the address bar) and allow Location."
   }
 }

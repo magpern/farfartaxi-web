@@ -41,6 +41,8 @@ export function LiveRideMap({ pickup, destination, car, target }: Props) {
   const circle = useRef<L.Circle | null>(null)
   const carPos = useRef<LatLon | null>(null)
   const anim = useRef(0)
+  const fitting = useRef(false)
+  const unmounted = useRef(false)
   const userMoved = useRef(false)
   const latest = useRef({ car, target, pickup, destination })
   useEffect(() => {
@@ -63,14 +65,17 @@ export function LiveRideMap({ pickup, destination, car, target }: Props) {
       maxZoom: 18,
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(map)
-    map.on('dragstart zoomstart', (e) => {
-      // zoomstart also fires for our own fitBounds; only count gestures
-      if (e.type === 'dragstart') userMoved.current = true
+    map.on('dragstart zoomstart', () => {
+      // zoomstart also fires for our own fitBounds/setView (flagged); anything else is the user (drag or pinch)
+      if (!fitting.current) userMoved.current = true
     })
     map.setView(tup(latest.current.pickup), 14)
     mapRef.current = map
+    unmounted.current = false
     return () => {
+      unmounted.current = true
       cancelAnimationFrame(anim.current)
+      map.off()
       map.remove()
       mapRef.current = null
       carMarker.current = null
@@ -126,7 +131,17 @@ export function LiveRideMap({ pickup, destination, car, target }: Props) {
   const carAcc = car?.accuracyM
   useEffect(() => {
     const map = mapRef.current
-    if (!map || carLat == null || carLon == null) return
+    if (!map) return
+    if (carLat == null || carLon == null) {
+      // car gone (e.g. the ride left the driving statuses): drop the marker and accuracy circle
+      cancelAnimationFrame(anim.current)
+      carMarker.current?.remove()
+      carMarker.current = null
+      circle.current?.remove()
+      circle.current = null
+      carPos.current = null
+      return
+    }
     const to: LatLon = { lat: carLat, lon: carLon }
     const place = (p: LatLon) => {
       carMarker.current?.setLatLng(tup(p))
@@ -143,6 +158,7 @@ export function LiveRideMap({ pickup, destination, car, target }: Props) {
       cancelAnimationFrame(anim.current)
       const start = performance.now()
       const step = (now: number) => {
+        if (unmounted.current || mapRef.current !== map) return
         const p = tweenPoint(from, to, now - start, TWEEN_MS)
         place(p)
         if (now - start < TWEEN_MS) anim.current = requestAnimationFrame(step)
@@ -164,25 +180,32 @@ export function LiveRideMap({ pickup, destination, car, target }: Props) {
     const map = mapRef.current
     if (!map) return
     const stop = target === 'DESTINATION' ? destination : pickup
+    const fit = (fn: () => void) => {
+      fitting.current = true
+      try {
+        fn()
+      } finally {
+        // zoomstart fires synchronously for animated and instant moves alike; clear after the current tick
+        setTimeout(() => {
+          fitting.current = false
+        }, 0)
+      }
+    }
     if (carLat == null || carLon == null) {
-      map.setView(tup(stop), 15)
+      fit(() => map.setView(tup(stop), 15))
       return
     }
     const pts = L.latLngBounds([tup(stop), [carLat, carLon]])
     const view = map.getBounds()
     if (!userMoved.current || !view.contains(pts)) {
-      map.fitBounds(pts, { padding: [40, 40], maxZoom: 16, animate: true })
+      fit(() => map.fitBounds(pts, { padding: [40, 40], maxZoom: 16, animate: true }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refit on car/target change only
   }, [carLat, carLon, target])
 
   return (
-    <div
-      ref={node}
-      className="live-map"
-      data-testid="live-map"
-      role="img"
-      aria-label={t('live.mapLabel')}
-    />
+    <div role="region" aria-label={t('live.mapLabel')}>
+      <div ref={node} className="live-map" data-testid="live-map" />
+    </div>
   )
 }

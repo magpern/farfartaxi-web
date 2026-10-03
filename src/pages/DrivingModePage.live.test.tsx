@@ -10,7 +10,7 @@ vi.mock('../api/client', async (orig) => ({
   ...(await orig<typeof import('../api/client')>()),
   api: (...a: unknown[]) => apiMock(...a)
 }))
-const tracking = vi.hoisted(() => ({ error: null as null | 'denied', retry: vi.fn() }))
+const tracking = vi.hoisted(() => ({ error: null as null | 'denied' | 'unavailable', retry: vi.fn() }))
 vi.mock('../lib/useDriverTracking', () => ({
   useTrackingError: () => tracking.error,
   retryTracking: () => tracking.retry()
@@ -56,8 +56,16 @@ describe('driving mode live bits', () => {
     expect(await screen.findByText('Håll skärmen tänd medan du kör')).toBeInTheDocument()
   })
 
-  it('shows the red banner with a retry button when location is off', async () => {
+  it('shows settings guidance, not a retry button, when permission is denied', async () => {
     tracking.error = 'denied'
+    show()
+    expect(await screen.findByText(/Platsåtkomst är blockerad/)).toBeInTheDocument()
+    expect(screen.getByTestId('location-denied-help')).toHaveTextContent(/webbplatsinställningarna/)
+    expect(screen.queryByRole('button', { name: 'Försök igen' })).toBeNull()
+  })
+
+  it('shows the red banner with a retry button when GPS is unavailable', async () => {
+    tracking.error = 'unavailable'
     show()
     expect(await screen.findByText('Platsdelning är av – Lisa ser dig inte på kartan')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Försök igen' }))

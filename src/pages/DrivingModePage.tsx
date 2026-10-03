@@ -60,6 +60,8 @@ function DrivingScreen({ id }: { id: string | undefined }) {
   )
 }
 
+const isIos = () => typeof navigator !== 'undefined' && /iP(hone|ad|od)/.test(navigator.userAgent)
+
 function DrivingBody({
   ride,
   token,
@@ -100,10 +102,22 @@ function DrivingBody({
 
       {tracking && trackingError && (
         <div className="banner-danger location-off" role="alert">
-          <strong>{t('live.locationOff', { name: first })}</strong>
-          <Button variant="secondary" onClick={retryTracking}>
-            {t('live.locationRetry')}
-          </Button>
+          {trackingError === 'denied' ? (
+            // A denied permission cannot be re-prompted from the page: point to the settings instead of a retry button.
+            <>
+              <strong>{t('live.locationDenied', { name: first })}</strong>
+              <p className="tiny" data-testid="location-denied-help">
+                {isIos() ? t('live.locationDeniedIos') : t('live.locationDeniedAndroid')}
+              </p>
+            </>
+          ) : (
+            <>
+              <strong>{t('live.locationOff', { name: first })}</strong>
+              <Button variant="secondary" onClick={retryTracking}>
+                {t('live.locationRetry')}
+              </Button>
+            </>
+          )}
         </div>
       )}
 

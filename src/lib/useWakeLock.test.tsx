@@ -56,4 +56,18 @@ describe('useWakeLock', () => {
     const { result } = renderHook(() => useWakeLock(true))
     expect(result.current).toEqual({ supported: false, held: false })
   })
+
+  it('keeps a single request in flight and releases a lock that resolves after unmount', async () => {
+    let resolve: (s: ReturnType<typeof sentinel>) => void = () => {}
+    const request = vi.fn(() => new Promise<ReturnType<typeof sentinel>>((r) => (resolve = r)))
+    Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request } })
+    const { unmount } = renderHook(() => useWakeLock(true))
+    setVisibility('visible')
+    setVisibility('visible')
+    expect(request).toHaveBeenCalledTimes(1)
+    unmount()
+    const s = sentinel()
+    await act(async () => resolve(s))
+    expect(s.release).toHaveBeenCalled()
+  })
 })

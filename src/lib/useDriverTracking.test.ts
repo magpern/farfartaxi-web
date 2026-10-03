@@ -78,3 +78,32 @@ describe('useDriverTracking accuracy and errors', () => {
     expect(result.current).toBeNull()
   })
 })
+
+describe('useDriverTracking heartbeat', () => {
+  it('re-sends the last fix every 60 s while stationary, with the same coordinates', () => {
+    renderHook(() => useDriverTracking('t', rides))
+    fix(59, 18)
+    expect(post).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(30_000)
+    expect(post).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(35_000)
+    expect(post).toHaveBeenCalledTimes(2)
+    const body = JSON.parse((post.mock.calls[1] as unknown as [string, { body: string }])[1].body)
+    expect(body).toEqual({ lat: 59, lon: 18, accuracy: 5 })
+    vi.advanceTimersByTime(60_000)
+    expect(post).toHaveBeenCalledTimes(3)
+  })
+
+  it('does not heartbeat after a fresh fix was sent, nor after unmount', () => {
+    const { unmount } = renderHook(() => useDriverTracking('t', rides))
+    fix(59, 18)
+    vi.advanceTimersByTime(50_000)
+    fix(59.001, 18)
+    expect(post).toHaveBeenCalledTimes(2)
+    vi.advanceTimersByTime(30_000)
+    expect(post).toHaveBeenCalledTimes(2)
+    unmount()
+    vi.advanceTimersByTime(300_000)
+    expect(post).toHaveBeenCalledTimes(2)
+  })
+})

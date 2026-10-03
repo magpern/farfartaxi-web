@@ -26,7 +26,7 @@ describe('LiveStatus', () => {
     expect(screen.getByTestId('live-ago')).toHaveTextContent('uppdaterad för 23 s sedan')
     expect(screen.queryByTestId('live-stale')).toBeNull()
     act(() => void vi.advanceTimersByTime(100_000))
-    expect(screen.getByTestId('live-stale')).toHaveTextContent('Folkes position har inte uppdaterats på 2 min')
+    expect(screen.getByTestId('live-stale')).toHaveTextContent('Folkes position har inte uppdaterats på 2 min – skärmen kanske är avstängd')
   })
 
   it('shows the arrived and destination texts', () => {
@@ -39,5 +39,19 @@ describe('LiveStatus', () => {
   it('warns when the server flags the position stale', () => {
     render(ui({ locationStale: true }))
     expect(screen.getByTestId('live-stale')).toBeInTheDocument()
+  })
+
+  it('shows "waiting" instead of the stale alert in the first minute without a position', () => {
+    render(ui({ lastLocationAt: null, locationStale: true }))
+    expect(screen.getByTestId('live-waiting')).toHaveTextContent('Väntar på Folkes position')
+    expect(screen.queryByTestId('live-stale')).toBeNull()
+    act(() => void vi.advanceTimersByTime(61_000))
+    expect(screen.queryByTestId('live-waiting')).toBeNull()
+    expect(screen.getByTestId('live-stale')).toBeInTheDocument()
+  })
+
+  it('computes the age against the server clock offset', () => {
+    render(ui({ serverOffsetMs: 10_000 }))
+    expect(screen.getByTestId('live-ago')).toHaveTextContent('uppdaterad för 30 s sedan')
   })
 })

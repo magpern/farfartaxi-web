@@ -216,7 +216,7 @@ function RideBody({
             {t('rides.cancel')}
           </Button>
         )}
-        {canShare && <ShareRideButton rideId={ride.id} token={token} onToast={onToast} />}
+        {canShare && <ShareRideButton rideId={ride.id} token={token} onToast={onToast} shareActive={ride.shareActive} prefetch />}
         {ride.status === 'COMPLETED' && canRate && (
           <Button variant="primary" size="lg" block onClick={onRate}>
             {t('rating.cta')}

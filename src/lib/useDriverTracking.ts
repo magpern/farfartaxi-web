@@ -5,6 +5,9 @@ import { DRIVING_STATUSES, type RideResponse } from './rideTypes'
 
 export const GPS_MIN_INTERVAL_MS = 10_000
 export const GPS_MIN_MOVE_M = 50
+/** Re-send the last fix this often when no new one went out (stationary at pickup must not look stale). */
+export const HEARTBEAT_MS = 60_000
+const HEARTBEAT_CHECK_MS = 5_000
 
 /** Shared between the shell (which runs the GPS watch) and the driving screen (which shows the banner). */
 export type TrackingError = 'denied' | 'unavailable' | null
@@ -36,10 +39,10 @@ export function retryTracking() {
 }
 const useRetryNonce = () => useSyncExternalStore(subscribe, () => retryNonce)
 
-type Sent = { lat: number; lon: number; at: number }
+type Sent = { lat: number; lon: number; at: number; accuracy: number }
 
 /** Send the first fix, then at most every 10 s, or at once after moving >= 50 m since the last sent fix. */
-export function shouldSendFix(last: Sent | null, lat: number, lon: number, now: number): boolean {
+export function shouldSendFix(last: { lat: number; lon: number; at: number } | null, lat: number, lon: number, now: number): boolean {
   if (!last) return true
   if (now - last.at >= GPS_MIN_INTERVAL_MS) return true
   return haversine(last.lat, last.lon, lat, lon) * 1000 >= GPS_MIN_MOVE_M
@@ -61,23 +64,25 @@ export function useDriverTracking(token: string, myRides: RideResponse[]) {
       return () => setTrackingError(null)
     }
     let last: Sent | null = null
+    const send = (s: Sent) => {
+      last = { ...s }
+      api(`/api/driver/rides/${activeId}/location`, {
+        method: 'POST',
+        token,
+        body: JSON.stringify({ lat: s.lat, lon: s.lon, accuracy: s.accuracy })
+      }).catch(() => {
+        /* a missed position update is not worth interrupting the driver */
+      })
+    }
+    const heartbeat = window.setInterval(() => {
+      if (last && Date.now() - last.at >= HEARTBEAT_MS) send({ ...last, at: Date.now() })
+    }, HEARTBEAT_CHECK_MS)
     const id = navigator.geolocation.watchPosition(
       (pos) => {
         setTrackingError(null)
         const now = Date.now()
         if (!shouldSendFix(last, pos.coords.latitude, pos.coords.longitude, now)) return
-        last = { lat: pos.coords.latitude, lon: pos.coords.longitude, at: now }
-        api(`/api/driver/rides/${activeId}/location`, {
-          method: 'POST',
-          token,
-          body: JSON.stringify({
-            lat: pos.coords.latitude,
-            lon: pos.coords.longitude,
-            accuracy: pos.coords.accuracy
-          })
-        }).catch(() => {
-          /* a missed position update is not worth interrupting the driver */
-        })
+        send({ lat: pos.coords.latitude, lon: pos.coords.longitude, accuracy: pos.coords.accuracy, at: now })
       },
       (err) => {
         // Driving still works without live position; the driving screen shows a banner with a retry button.
@@ -86,6 +91,7 @@ export function useDriverTracking(token: string, myRides: RideResponse[]) {
       { enableHighAccuracy: true, maximumAge: 5000 }
     )
     return () => {
+      window.clearInterval(heartbeat)
       navigator.geolocation.clearWatch(id)
       setTrackingError(null)
     }

@@ -53,11 +53,21 @@ export function statusLine(status: string, etaTarget: EtaTarget | null | undefin
   }
 }
 
-export function secondsSince(iso: string | null | undefined, now: number): number | null {
+/** No position yet this soon after EN_ROUTE: show "waiting" rather than an alarming stale alert. */
+export const FIRST_FIX_GRACE_MS = 60_000
+
+/** Seconds since `iso`. `serverOffsetMs` (server clock minus client clock) corrects for a skewed phone clock; clamped >= 0. */
+export function secondsSince(iso: string | null | undefined, now: number, serverOffsetMs = 0): number | null {
   if (!iso) return null
   const t = Date.parse(iso)
   if (Number.isNaN(t)) return null
-  return Math.max(0, Math.floor((now - t) / 1000))
+  return Math.max(0, Math.floor((now + serverOffsetMs - t) / 1000))
+}
+
+/** Server-minus-client clock offset from a server timestamp received at client time `receivedAt`. */
+export function serverOffset(serverTime: string | null | undefined, receivedAt: number): number {
+  const t = serverTime ? Date.parse(serverTime) : NaN
+  return Number.isNaN(t) ? 0 : t - receivedAt
 }
 
 export type Ago = { key: 'live.updatedAgoSec' | 'live.updatedAgoMin'; n: number }
@@ -71,10 +81,18 @@ export type Stale = { minutes: number | null } | null
  * Stale = the server flagged it, or no update for more than 2 min. Only while the car should be moving.
  * `minutes` is null when no position has ever arrived.
  */
-export function staleState(status: string, locationStale: boolean | null | undefined, lastLocationAt: string | null | undefined, now: number): Stale {
+export function staleState(
+  status: string,
+  locationStale: boolean | null | undefined,
+  lastLocationAt: string | null | undefined,
+  now: number,
+  serverOffsetMs = 0
+): Stale {
   if (!isDrivingStatus(status)) return null
-  const secs = secondsSince(lastLocationAt, now)
+  const secs = secondsSince(lastLocationAt, now, serverOffsetMs)
   if (secs === null) return locationStale ? { minutes: null } : null
-  if (!locationStale && secs * 1000 <= STALE_AFTER_MS) return null
+  // The server flag is authoritative; fall back to our own clock only when it is absent.
+  const stale = locationStale ?? secs * 1000 > STALE_AFTER_MS
+  if (!stale) return null
   return { minutes: Math.max(2, Math.floor(secs / 60)) }
 }

@@ -48,6 +48,8 @@ export type RideResponse = {
   etaTarget?: 'PICKUP' | 'DESTINATION' | null
   /** Server says the position is older than 2 min / missing (EN_ROUTE..PICKED_UP). */
   locationStale?: boolean | null
+  /** Passenger only: a share link is currently active for this ride. */
+  shareActive?: boolean | null
   pickupNote?: string | null
   urgent?: boolean | null
   passengerName?: string | null

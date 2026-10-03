@@ -19,12 +19,14 @@ export function useWakeLock(active: boolean): { supported: boolean; held: boolea
     if (!active || !supported) return
     let cancelled = false
     let sentinel: Sentinel | null = null
+    let inFlight = false
     const acquire = async () => {
-      if (document.visibilityState !== 'visible' || (sentinel && !sentinel.released)) return
+      if (inFlight || document.visibilityState !== 'visible' || (sentinel && !sentinel.released)) return
+      inFlight = true
       try {
         const s = await (navigator as unknown as { wakeLock: WakeLockApi }).wakeLock.request('screen')
-        if (cancelled) {
-          void s.release()
+        if (cancelled || (sentinel && !sentinel.released)) {
+          void s.release().catch(() => {}) // unmounted meanwhile, or a duplicate: do not leak a lock
           return
         }
         sentinel = s
@@ -34,6 +36,8 @@ export function useWakeLock(active: boolean): { supported: boolean; held: boolea
         })
       } catch {
         setHeld(false) // denied (battery saver etc.): the hint is shown instead
+      } finally {
+        inFlight = false
       }
     }
     const onVis = () => void acquire()

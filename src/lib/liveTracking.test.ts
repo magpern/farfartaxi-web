@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { relativeAgo, secondsSince, showAccuracyCircle, staleState, statusLine, tweenPoint } from './liveTracking'
+import { relativeAgo, secondsSince, serverOffset, showAccuracyCircle, staleState, statusLine, tweenPoint } from './liveTracking'
 
 const A = { lat: 59, lon: 18 }
 const B = { lat: 60, lon: 20 }
@@ -64,11 +64,18 @@ describe('relative time and stale detection', () => {
   })
   it('is stale after 2 minutes or when the server says so, only while driving', () => {
     expect(staleState('EN_ROUTE', false, at(119), now)).toBeNull()
-    expect(staleState('EN_ROUTE', false, at(121), now)).toEqual({ minutes: 2 })
-    expect(staleState('PICKED_UP', false, at(400), now)).toEqual({ minutes: 6 })
+    expect(staleState('EN_ROUTE', undefined, at(121), now)).toEqual({ minutes: 2 })
+    expect(staleState('EN_ROUTE', false, at(121), now)).toBeNull() // server flag wins
+    expect(staleState('PICKED_UP', null, at(400), now)).toEqual({ minutes: 6 })
     expect(staleState('EN_ROUTE', true, at(10), now)).toEqual({ minutes: 2 })
     expect(staleState('EN_ROUTE', true, null, now)).toEqual({ minutes: null })
     expect(staleState('EN_ROUTE', false, null, now)).toBeNull()
     expect(staleState('ACCEPTED', true, at(900), now)).toBeNull()
+  })
+  it('uses a server clock offset and clamps negative ages', () => {
+    expect(secondsSince(at(20), now, 5000)).toBe(25)
+    expect(secondsSince(at(-30), now)).toBe(0)
+    expect(serverOffset(new Date(now + 4000).toISOString(), now)).toBe(4000)
+    expect(serverOffset(null, now)).toBe(0)
   })
 })
