@@ -162,7 +162,16 @@
     "toastBlocked": "Användare blockerad.",
     "toastUnblocked": "Användare avblockerad.",
     "toastUserDeleted": "Användare borttagen.",
-    "toastRideDeleted": "Resa borttagen."
+    "toastRideDeleted": "Resa borttagen.",
+    "pendingTitle": "Väntar på godkännande",
+    "approve": "Godkänn",
+    "reject": "Neka",
+    "rejectConfirm": "Vill du neka och ta bort det här kontot?",
+    "toastApproved": "Kontot är godkänt",
+    "toastRejected": "Kontot har nekats och tagits bort",
+    "toastActionFailed": "Något gick fel. Försök igen.",
+    "signInPassword": "Lösenord",
+    "signInGoogle": "Google"
   },
   "pwa": {
     "installTitle": "Lägg till Farfartaxi på hemskärmen",
@@ -196,5 +205,12 @@
   "languages": {
     "sv": "Svenska",
     "en": "English"
+  },
+  "pending": {
+    "title": "Ditt konto väntar på godkännande",
+    "body": "En vuxen i familjen behöver godkänna ditt konto innan du kan boka.",
+    "recheck": "Kolla igen",
+    "logout": "Logga ut",
+    "stillPending": "Inte godkänt än. Försök igen lite senare."
   }
 }

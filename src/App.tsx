@@ -14,6 +14,7 @@ import {
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { useI18n } from './i18n/context'
 import { Clock24hTimePicker } from './Clock24hTimePicker'
+import { PendingApproval } from './components/PendingApproval'
 import {
   FARFARTAXI_PWA_INSTALL_SESSION_KEY,
   isStandalonePwa,
@@ -53,6 +54,7 @@ type UserView = {
   role: Role
   mustChangePassword: boolean
   hasLocalPassword: boolean
+  approved: boolean
 }
 
 type AuthResponse = {
@@ -354,6 +356,12 @@ function registerSessionExpiredHandler(handler: (() => void) | undefined) {
   sessionExpiredHandler = handler
 }
 
+let pendingApprovalHandler: (() => void) | undefined
+
+function registerPendingApprovalHandler(handler: (() => void) | undefined) {
+  pendingApprovalHandler = handler
+}
+
 const BookingDraftContext = createContext<{
   draft: BookingDraft
   setDraft: Dispatch<SetStateAction<BookingDraft>>
@@ -391,6 +399,34 @@ function ProtectedApp() {
     return () => registerSessionExpiredHandler(undefined)
   }, [setAuth])
 
+  // Any 403 PENDING_APPROVAL from api() flips the stored user to unapproved.
+  useEffect(() => {
+    registerPendingApprovalHandler(() =>
+      setAuth((prev) =>
+        prev && prev.user.approved !== false ? { ...prev, user: { ...prev.user, approved: false } } : prev
+      )
+    )
+    return () => registerPendingApprovalHandler(undefined)
+  }, [setAuth])
+
+  const token = auth?.token
+  const refreshMe = useCallback(async (): Promise<boolean> => {
+    if (!token) return true
+    try {
+      const me = await api<UserView>('/api/auth/me', { token })
+      const approved = me.approved !== false
+      setAuth((prev) => (prev ? { ...prev, user: { ...prev.user, ...me, approved } } : prev))
+      return approved
+    } catch {
+      return false
+    }
+  }, [token, setAuth])
+
+  // Refresh the approval flag when the app starts (stored sessions may be stale).
+  useEffect(() => {
+    void refreshMe()
+  }, [refreshMe])
+
   useEffect(() => {
     const onVis = () => {
       if (document.visibilityState !== 'visible') return
@@ -406,6 +442,14 @@ function ProtectedApp() {
 
   if (!auth) {
     return <Navigate to="/login" replace />
+  }
+  if (auth.user.approved === false) {
+    return (
+      <PendingApproval
+        onRecheck={refreshMe}
+        onLogout={() => setAuth(null)}
+      />
+    )
   }
   return <Dashboard auth={auth} setAuth={setAuth} />
 }
@@ -2058,6 +2102,8 @@ type AdminUserRow = {
   mustChangePassword: boolean
   hasLocalPassword: boolean
   enabled: boolean
+  approved?: boolean
+  createdAt?: string
 }
 
 function AdminPage({
@@ -2133,6 +2179,30 @@ function AdminPage({
     load()
   }
 
+  async function approveUser(userId: number) {
+    try {
+      await api(`/api/admin/users/${userId}/approve`, { method: 'POST', token })
+      onToast(t('admin.toastApproved'))
+      load()
+    } catch {
+      onToast(t('admin.toastActionFailed'))
+    }
+  }
+
+  async function rejectUser(userId: number) {
+    if (!window.confirm(t('admin.rejectConfirm'))) return
+    try {
+      await api(`/api/admin/users/${userId}`, { method: 'DELETE', token })
+      onToast(t('admin.toastRejected'))
+      load()
+    } catch {
+      onToast(t('admin.toastActionFailed'))
+    }
+  }
+
+  const pendingUsers = users.filter((u) => u.approved === false)
+  const approvedUsers = users.filter((u) => u.approved !== false)
+
   async function deleteRide() {
     await api(`/api/admin/rides/${rideIdToDelete}`, { method: 'DELETE', token })
     onToast(t('admin.toastRideDeleted'))
@@ -2140,9 +2210,33 @@ function AdminPage({
 
   return (
     <div className="subpage-wrap stack">
+      {pendingUsers.length > 0 && (
+        <div className="card admin-pending-card">
+          <h3>
+            {t('admin.pendingTitle')} ({pendingUsers.length})
+          </h3>
+          {pendingUsers.map((u) => (
+            <article key={u.id} className="ride-item">
+              <p>
+                <strong>{u.fullName}</strong> ({u.email}) — {u.role}
+                {u.createdAt && <span className="tiny"> {new Date(u.createdAt).toLocaleDateString()}</span>}{' '}
+                <span className="tiny">[{u.hasLocalPassword ? t('admin.signInPassword') : t('admin.signInGoogle')}]</span>
+              </p>
+              <div className="admin-pending-actions">
+                <button type="button" className="btn btn-primary" onClick={() => approveUser(u.id)}>
+                  {t('admin.approve')}
+                </button>
+                <button type="button" className="btn btn-danger" onClick={() => rejectUser(u.id)}>
+                  {t('admin.reject')}
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
       <div className="card">
         <h3>{t('admin.users')}</h3>
-        {users.map((u) => {
+        {approvedUsers.map((u) => {
           const isSelf = u.id === currentUserId
           return (
             <article key={u.id} className="ride-item">
@@ -2251,7 +2345,8 @@ function normalizeStoredAuth(parsed: AuthResponse): AuthResponse {
     user: {
       ...parsed.user,
       hasLocalPassword:
-        typeof parsed.user.hasLocalPassword === 'boolean' ? parsed.user.hasLocalPassword : true
+        typeof parsed.user.hasLocalPassword === 'boolean' ? parsed.user.hasLocalPassword : true,
+      approved: typeof parsed.user.approved === 'boolean' ? parsed.user.approved : true
     }
   }
 }
@@ -2301,7 +2396,10 @@ async function api<T = unknown>(
     }
     let text = `Request failed (${response.status})`
     try {
-      const payload = (await response.json()) as { error?: string }
+      const payload = (await response.json()) as { error?: string; code?: string }
+      if (response.status === 403 && payload.code === 'PENDING_APPROVAL' && opts.token) {
+        pendingApprovalHandler?.()
+      }
       if (payload.error) text = payload.error
     } catch {
       // ignored

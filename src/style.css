@@ -1157,3 +1157,30 @@ a.link-back {
     padding: 0.7rem;
   }
 }
+
+.pending-approval {
+  text-align: center;
+}
+
+.pending-approval-lead {
+  font-size: 1.1rem;
+  line-height: 1.5;
+}
+
+.pending-approval-actions,
+.admin-pending-actions {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.pending-approval-actions .btn,
+.admin-pending-actions .btn {
+  min-height: 52px;
+  font-size: 1.05rem;
+}
+
+.admin-pending-card {
+  border-color: #f59e0b;
+}
+
