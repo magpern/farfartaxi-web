@@ -21,6 +21,17 @@ import {
   PwaInstallModal,
   schedulePwaInstallPrompt
 } from './PwaInstallModal'
+import {
+  BOOKING_DRAFT_STORAGE_KEY,
+  buildRideBookPayload,
+  defaultDraft,
+  readBookingDraftFromStorage,
+  writeBookingDraftToStorage,
+  type BookingDraft
+} from './lib/bookingDraft'
+import { haversine } from './lib/geo'
+import { isJwtExpired } from './lib/jwt'
+import { dedupeNominatimResults, formatNominatimAddress, type NominatimResult } from './lib/nominatim'
 import L from 'leaflet'
 import { registerSW } from 'virtual:pwa-register'
 import 'leaflet/dist/leaflet.css'
@@ -99,17 +110,6 @@ const REVERSE_GEOCODE_DETAIL_ZOOM = 18
 
 /** Geocoding is proxied by the backend (`/api/public/geocode/*`) so the browser avoids CORS and shared rate limits. */
 
-type NominatimResult = {
-  display_name: string
-  lat: string
-  lon: string
-  /** POI / place name from Nominatim (shops, stations, etc.). */
-  name?: string
-  class?: string
-  type?: string
-  address?: Record<string, string | undefined>
-}
-
 /** OSRM route response (subset; geometries=geojson). */
 type OsrmRouteResponse = {
   code: string
@@ -118,93 +118,6 @@ type OsrmRouteResponse = {
     duration: number
     geometry: { type: string; coordinates: number[][] }
   }>
-}
-
-/** Local area (kommun-level): "Järfälla kommun" → "Järfälla", not län/county (e.g. Stockholm). */
-function stripKommunSuffix(raw: string): string {
-  return raw.replace(/\s+kommun$/i, '').trim()
-}
-
-/** Län/county fallback when no municipality field exists (rural). */
-function formatCountyFallback(raw: string): string {
-  return raw
-    .replace(/\s+County$/i, '')
-    .replace(/\s+län$/i, '')
-    .trim()
-}
-
-/**
- * Street + locality ("…väg 10, Järfälla") or POI + locality ("ICA Maxi Barkarby, Järfälla").
- * Uses Nominatim `name` when there is no road (POI / landmark search). Sweden-only on search API.
- */
-function formatNominatimAddress(payload: NominatimResult | { display_name?: string; address?: Record<string, string | undefined> }): string {
-  const full = payload as NominatimResult
-  const a = payload.address
-  const poiName = (full.name?.trim() || a?.name?.trim() || '').trim()
-
-  const road =
-    a?.road ||
-    a?.pedestrian ||
-    a?.footway ||
-    a?.path ||
-    a?.cycleway ||
-    a?.residential
-  const housenumber = a?.house_number || a?.house_name
-  const streetLine =
-    road && housenumber
-      ? `${road} ${housenumber}`.trim()
-      : road
-        ? road.trim()
-        : housenumber
-          ? housenumber.trim()
-          : ''
-
-  const localityRaw =
-    a?.municipality ||
-    a?.city ||
-    a?.town ||
-    a?.village ||
-    a?.suburb ||
-    a?.neighbourhood ||
-    a?.hamlet
-  let area = localityRaw ? stripKommunSuffix(localityRaw) : ''
-  if (!area && a) {
-    const countyRaw = a.county || a.state || a.region
-    if (countyRaw) area = formatCountyFallback(countyRaw)
-  }
-
-  let lead = streetLine
-  if (poiName) {
-    if (!streetLine) lead = poiName
-    else {
-      const pl = poiName.toLowerCase()
-      const sl = streetLine.toLowerCase()
-      lead = sl.includes(pl) || pl.includes(sl) ? streetLine : `${poiName}, ${streetLine}`
-    }
-  }
-
-  const parts = [lead, area].filter(Boolean)
-  const joined = parts.join(', ')
-  if (joined) return joined
-  if (poiName && !area) return poiName
-  return payload.display_name ?? ''
-}
-
-/** Nominatim often returns several OSM hits for the same street (segments); same formatted label → one row. */
-function dedupeNominatimResults(items: NominatimResult[]): NominatimResult[] {
-  const seen = new Set<string>()
-  const out: NominatimResult[] = []
-  for (const item of items) {
-    const label = (formatNominatimAddress(item) || item.display_name)
-      .normalize('NFC')
-      .trim()
-      .replace(/\s+/g, ' ')
-    const key = label.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push(item)
-  }
-  return out
 }
 
 function formatYmdHm(iso: string) {
@@ -225,98 +138,8 @@ function formatLocaleDateTime24h(iso: string, dateLocale: string) {
   })
 }
 
-type BookingDraft = {
-  fromAddress: string
-  fromLat: number
-  fromLon: number
-  toAddress: string
-  toLat: number
-  toLon: number
-  /** When set, a driver books the ride for this registered passenger. */
-  passengerUserId?: number
-}
-
-const defaultDraft: BookingDraft = {
-  fromAddress: '',
-  toAddress: '',
-  fromLat: 59.3293,
-  fromLon: 18.0686,
-  toLat: 59.3346,
-  toLon: 18.0632
-}
-
-const BOOKING_DRAFT_STORAGE_KEY = 'farfartaxi-booking-draft'
 /** One-shot flag so /login can show session-expired copy after proactive logout. */
 const SESSION_EXPIRED_LOGIN_FLASH = 'farfartaxi-session-expired-flash'
-
-function readBookingDraftFromStorage(): BookingDraft | null {
-  if (typeof sessionStorage === 'undefined') return null
-  try {
-    const raw = sessionStorage.getItem(BOOKING_DRAFT_STORAGE_KEY)
-    if (!raw) return null
-    const o = JSON.parse(raw) as Record<string, unknown>
-    if (typeof o.fromAddress !== 'string' || typeof o.toAddress !== 'string') return null
-    const fromLat = Number(o.fromLat)
-    const fromLon = Number(o.fromLon)
-    const toLat = Number(o.toLat)
-    const toLon = Number(o.toLon)
-    if (![fromLat, fromLon, toLat, toLon].every(Number.isFinite)) return null
-    const out: BookingDraft = {
-      fromAddress: o.fromAddress,
-      toAddress: o.toAddress,
-      fromLat,
-      fromLon,
-      toLat,
-      toLon
-    }
-    if (o.passengerUserId != null) {
-      const pid = Number(o.passengerUserId)
-      if (Number.isFinite(pid)) out.passengerUserId = pid
-    }
-    return out
-  } catch {
-    return null
-  }
-}
-
-function writeBookingDraftToStorage(d: BookingDraft) {
-  try {
-    sessionStorage.setItem(BOOKING_DRAFT_STORAGE_KEY, JSON.stringify(d))
-  } catch {
-    /* quota / private mode */
-  }
-}
-
-function buildRideBookPayload(draft: BookingDraft, scheduledAtIso: string): Record<string, unknown> {
-  const body: Record<string, unknown> = {
-    fromAddress: draft.fromAddress,
-    fromLat: draft.fromLat,
-    fromLon: draft.fromLon,
-    toAddress: draft.toAddress,
-    toLat: draft.toLat,
-    toLon: draft.toLon,
-    scheduledAt: scheduledAtIso
-  }
-  if (typeof draft.passengerUserId === 'number' && Number.isFinite(draft.passengerUserId)) {
-    body.passengerUserId = draft.passengerUserId
-  }
-  return body
-}
-
-/** JWT `exp` is seconds since epoch; used so we do not treat an expired token as a logged-in session. */
-function isJwtExpired(token: string, skewMs = 60_000): boolean {
-  const parts = token.split('.')
-  if (parts.length < 2) return true
-  try {
-    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
-    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
-    const payload = JSON.parse(atob(padded)) as { exp?: number }
-    if (payload.exp == null || typeof payload.exp !== 'number') return true
-    return Date.now() >= payload.exp * 1000 - skewMs
-  } catch {
-    return true
-  }
-}
 
 function markSessionExpiredLoginFlash() {
   try {
@@ -1251,6 +1074,7 @@ function BookingPage({
         routeLineRef.current = null
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- legacy: only re-run when draft coordinates/addresses change, not on other draft fields (pre-existing)
   }, [draft.fromAddress, draft.toAddress, draft.fromLat, draft.fromLon, draft.toLat, draft.toLon])
 
   useEffect(() => {
@@ -1784,6 +1608,7 @@ function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) =
     load()
     const id = window.setInterval(load, 15000)
     return () => window.clearInterval(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- legacy: intentionally runs on mount only; load() is recreated each render (pre-existing)
   }, [])
 
   async function cancel(rideId: number, status: string) {
@@ -1931,6 +1756,7 @@ function DriverPage({ token, onToast }: { token: string; onToast: (m: string) =>
       window.clearInterval(id)
       if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- legacy: intentionally runs on mount only; load() is recreated each render (pre-existing)
   }, [])
 
   async function accept(rideId: number) {
@@ -2126,6 +1952,7 @@ function AdminPage({
 
   useEffect(() => {
     load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- legacy: intentionally runs on mount only; load() is recreated each render (pre-existing)
   }, [])
 
   async function promoteDriver(userId: number) {
@@ -2443,22 +2270,6 @@ function bookingApiErrorMessage(
     return t('errors.bookingFuture')
   }
   return t('errors.bookingFailed', { message: msg })
-}
-
-function haversine(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371
-  const dLat = deg2rad(lat2 - lat1)
-  const dLon = deg2rad(lon2 - lon1)
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return R * c
-}
-
-function deg2rad(v: number) {
-  return v * (Math.PI / 180)
 }
 
 export default App
