@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { json, mockFetch, noContent } from '../test/fetchMock'
@@ -16,6 +16,8 @@ vi.mock('../lib/push/env', () => ({
   pushSupported: () => env.supported,
   getPermission: () => (env.supported ? env.permission : 'unsupported')
 }))
+const hasSub = vi.hoisted(() => ({ value: true }))
+vi.mock('../lib/push/hasSubscription', () => ({ hasPushSubscription: async () => hasSub.value }))
 const subscribeMock = vi.hoisted(() => vi.fn())
 vi.mock('../lib/push/subscription', () => ({
   subscribe: subscribeMock,
@@ -31,8 +33,25 @@ import { NotificationPrompt } from './NotificationPrompt'
 
 beforeEach(() => {
   Object.assign(env, { ios: false, standalone: false, supported: true, permission: 'default' })
+  hasSub.value = true
   subscribeMock.mockReset()
   localStorage.clear()
+})
+
+describe('NotificationPrompt snooze', () => {
+  it('Inte nu hides the card for 7 days, per user', async () => {
+    const { unmount } = renderApp(<NotificationPrompt />)
+    await userEvent.click(screen.getByRole('button', { name: 'Inte nu' }))
+    expect(screen.queryByRole('button', { name: 'Slå på notiser' })).not.toBeInTheDocument()
+    unmount()
+    renderApp(<NotificationPrompt />)
+    expect(screen.queryByRole('button', { name: 'Slå på notiser' })).not.toBeInTheDocument()
+    localStorage.setItem('farfartaxi-notif-snoozed-1', String(Date.now() - 8 * 24 * 3600_000))
+    localStorage.setItem('farfartaxi-locale', 'sv')
+    cleanup()
+    renderApp(<NotificationPrompt />)
+    expect(screen.getByRole('button', { name: 'Slå på notiser' })).toBeInTheDocument()
+  })
 })
 
 describe('NotificationPrompt card states', () => {
@@ -115,13 +134,31 @@ describe('Mer → Notiser', () => {
     env.permission = 'granted'
     const f = prefsRoutes({ reminders: false })
     renderApp(<MorePage />, { role: 'DRIVER' })
-    expect(screen.getByTestId('push-status')).toHaveTextContent('På')
+    await waitFor(() => expect(screen.getByTestId('push-status')).toHaveTextContent('På'))
     const reminders = await screen.findByRole('checkbox', { name: /Påminnelser/ })
     await waitFor(() => expect(reminders).toBeEnabled())
     expect(reminders).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: /Nya resor/ })).toBeChecked()
     await userEvent.click(reminders)
     await waitFor(() => expect(puts(f)).toEqual([{ rideRequests: true, rideUpdates: true, reminders: true }]))
+  })
+
+  it('granted without a subscription shows Inte aktiverad with an activate button', async () => {
+    env.permission = 'granted'
+    hasSub.value = false
+    prefsRoutes()
+    renderApp(<MorePage />)
+    await waitFor(() => expect(screen.getByTestId('push-status')).toHaveTextContent('Inte aktiverad'))
+    expect(screen.getByRole('button', { name: 'Slå på notiser' })).toBeInTheDocument()
+  })
+
+  it('blocked hint is iOS-specific on iOS', () => {
+    env.permission = 'denied'
+    env.ios = true
+    env.standalone = true
+    mockFetch(() => json({}))
+    renderApp(<MorePage />)
+    expect(screen.getByText(/Inställningar → Notiser → Farfartaxi/)).toBeInTheDocument()
   })
 
   it('passengers see only Resuppdateringar and Påminnelser', async () => {

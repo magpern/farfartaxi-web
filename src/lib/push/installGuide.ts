@@ -21,3 +21,24 @@ export function shouldShowIosInstallGuide(now = Date.now()): boolean {
     return true
   }
 }
+
+export const NOTIF_SNOOZE_MS = 7 * 24 * 3600_000
+export const notifSnoozeKey = (userId: number) => `farfartaxi-notif-snoozed-${userId}`
+
+/** "Inte nu" on the enable-notifications card: hide it for 7 days, per user. */
+export function snoozeNotificationPrompt(userId: number, now = Date.now()): void {
+  try {
+    localStorage.setItem(notifSnoozeKey(userId), String(now))
+  } catch {
+    /* private mode */
+  }
+}
+
+export function isNotificationPromptSnoozed(userId: number, now = Date.now()): boolean {
+  try {
+    const at = Number(localStorage.getItem(notifSnoozeKey(userId)))
+    return at > 0 && now - at < NOTIF_SNOOZE_MS
+  } catch {
+    return false
+  }
+}

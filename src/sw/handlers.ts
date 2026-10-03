@@ -35,8 +35,7 @@ export type Registration = {
 export type WindowClientLike = {
   url: string
   focus(): Promise<unknown>
-  navigate?(url: string): Promise<unknown>
-  postMessage?(message: unknown): void
+  postMessage(message: unknown): void
 }
 
 export type ClientsLike = {
@@ -74,7 +73,7 @@ export async function handlePush(registration: Registration, payload: PushPayloa
 
 export const NOTIFICATION_CLICK_MESSAGE = 'NOTIFICATION_CLICK'
 
-/** Focus an existing app window and navigate it to `url`, else open a new one. */
+/** Focus an existing app window and ask it to route to `url` client-side (no reload), else open a new one. */
 export async function handleNotificationClick(
   clients: ClientsLike,
   data: Partial<NotificationData> | undefined,
@@ -85,15 +84,7 @@ export async function handleNotificationClick(
   const own = list.find((c) => c.url.startsWith(origin))
   if (own) {
     await own.focus()
-    if (own.navigate) {
-      try {
-        await own.navigate(url)
-        return
-      } catch {
-        /* fall through to postMessage */
-      }
-    }
-    own.postMessage?.({ type: NOTIFICATION_CLICK_MESSAGE, url })
+    own.postMessage({ type: NOTIFICATION_CLICK_MESSAGE, url })
     return
   }
   await clients.openWindow(url)

@@ -69,29 +69,21 @@ describe('payload parsing', () => {
 })
 
 function client(url: string, extra: Partial<WindowClientLike> = {}): WindowClientLike & { focus: ReturnType<typeof vi.fn> } {
-  return { url, focus: vi.fn().mockResolvedValue(undefined), navigate: vi.fn().mockResolvedValue(undefined), postMessage: vi.fn(), ...extra } as never
+  return { url, focus: vi.fn().mockResolvedValue(undefined), postMessage: vi.fn(), ...extra } as never
 }
 function clientsOf(list: WindowClientLike[]) {
   return { matchAll: vi.fn().mockResolvedValue(list), openWindow: vi.fn().mockResolvedValue(null) } satisfies ClientsLike
 }
 
 describe('handleNotificationClick', () => {
-  it('focuses an existing window and navigates it to the ride', async () => {
-    const c = client(`${ORIGIN}/app/resor`)
+  it('focuses an existing window and posts a client-side route message, never reloading', async () => {
+    const c = client(`${ORIGIN}/app/resor`, { navigate: vi.fn() } as never)
     const clients = clientsOf([c])
     await handleNotificationClick(clients, { url: '/app/resa/7' }, ORIGIN)
     expect(c.focus).toHaveBeenCalled()
-    expect(c.navigate).toHaveBeenCalledWith('/app/resa/7')
-    expect(clients.openWindow).not.toHaveBeenCalled()
-  })
-
-  it('posts a message when navigate is unavailable or fails', async () => {
-    const c = client(`${ORIGIN}/app`, { navigate: vi.fn().mockRejectedValue(new Error('no')) })
-    await handleNotificationClick(clientsOf([c]), { url: '/app/resa/7' }, ORIGIN)
     expect(c.postMessage).toHaveBeenCalledWith({ type: NOTIFICATION_CLICK_MESSAGE, url: '/app/resa/7' })
-    const d = client(`${ORIGIN}/app`, { navigate: undefined })
-    await handleNotificationClick(clientsOf([d]), { url: '/app/resa/8' }, ORIGIN)
-    expect(d.postMessage).toHaveBeenCalledWith({ type: NOTIFICATION_CLICK_MESSAGE, url: '/app/resa/8' })
+    expect((c as never as { navigate: ReturnType<typeof vi.fn> }).navigate).not.toHaveBeenCalled()
+    expect(clients.openWindow).not.toHaveBeenCalled()
   })
 
   it('opens a new window when no app window exists', async () => {

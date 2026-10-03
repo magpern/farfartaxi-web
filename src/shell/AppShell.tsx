@@ -2,7 +2,13 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { FARFARTAXI_PWA_INSTALL_SESSION_KEY, isStandalonePwa, PwaInstallModal } from '../PwaInstallModal'
 import { Toast } from '../components/ui'
-import { ensureSubscribed, shouldShowIosInstallGuide, unsubscribeOnLogout, useLocaleSync } from '../lib/push'
+import {
+  ensureSubscribed,
+  shouldShowIosInstallGuide,
+  unsubscribeOnLogout,
+  useLocaleSync,
+  useNotificationClickRouting
+} from '../lib/push'
 import {
   BOOKING_DRAFT_STORAGE_KEY,
   defaultDraft,
@@ -54,6 +60,7 @@ export function AppShell({
   const [draft, setDraft] = useState<BookingDraft>(() => readBookingDraftFromStorage() ?? defaultDraft)
   const { large, setLarge } = useLargeText(user.id, user.role)
   useLocaleSync(token, user.id)
+  useNotificationClickRouting()
 
   // Permission already granted: make sure this device still has a valid subscription and the server knows it.
   useEffect(() => {

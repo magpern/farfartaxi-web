@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useI18n } from '../i18n/context'
-import { isIos, usePushStatus } from '../lib/push'
+import { isIos, isNotificationPromptSnoozed, snoozeNotificationPrompt, usePushStatus } from '../lib/push'
 import { apiErrorMessage } from '../lib/apiErrors'
 import { useShell } from '../shell/ShellContext'
 import { isDriverRole } from '../shell/types'
@@ -25,6 +25,7 @@ export function NotificationPrompt() {
   const { user, token, onToast } = useShell()
   const { status, busy, enable } = usePushStatus(token)
   const [deniedHidden, setDeniedHidden] = useState(readDismissed)
+  const [snoozed, setSnoozed] = useState(() => isNotificationPromptSnoozed(user.id))
   const driver = isDriverRole(user.role)
 
   async function onEnable() {
@@ -37,7 +38,7 @@ export function NotificationPrompt() {
     }
   }
 
-  if (status === 'default') {
+  if (status === 'default' && !snoozed) {
     return (
       <Card tone="highlight" className="push-card">
         <h2 className="section-title">{t('notifications.enableTitle')}</h2>
@@ -45,6 +46,15 @@ export function NotificationPrompt() {
         <div className="push-card-actions">
           <Button variant="primary" size="lg" block disabled={busy} onClick={() => void onEnable()}>
             {busy ? t('notifications.enabling') : t('notifications.enableButton')}
+          </Button>
+          <Button
+            block
+            onClick={() => {
+              snoozeNotificationPrompt(user.id)
+              setSnoozed(true)
+            }}
+          >
+            {t('notifications.notNow')}
           </Button>
         </div>
       </Card>

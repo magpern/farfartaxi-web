@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getPermission, isIos, isStandalone, pushSupported } from './env'
+import { hasPushSubscription } from './hasSubscription'
 import { subscribe, type SubscribeResult } from './subscription'
 
 /**
@@ -18,10 +19,15 @@ export function currentPushStatus(): PushStatus {
 export function usePushStatus(token: string) {
   const [status, setStatus] = useState<PushStatus>(currentPushStatus)
   const [busy, setBusy] = useState(false)
+  const [subscribed, setSubscribed] = useState<boolean | null>(null)
 
   // Permission can change in the OS settings while we are in the background.
   useEffect(() => {
-    const refresh = () => setStatus(currentPushStatus())
+    const refresh = () => {
+      setStatus(currentPushStatus())
+      void hasPushSubscription().then(setSubscribed)
+    }
+    refresh()
     document.addEventListener('visibilitychange', refresh)
     return () => document.removeEventListener('visibilitychange', refresh)
   }, [])
@@ -34,8 +40,10 @@ export function usePushStatus(token: string) {
     } finally {
       setBusy(false)
       setStatus(currentPushStatus())
+      void hasPushSubscription().then(setSubscribed)
     }
   }, [token])
 
-  return { status, busy, enable }
+  /** `subscribed` is null until the first check finishes. */
+  return { status, busy, enable, subscribed }
 }

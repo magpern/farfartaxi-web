@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useI18n } from '../i18n/context'
-import { ALL_ON, getNotificationPrefs, putNotificationPrefs, usePushStatus, type NotificationPrefs } from '../lib/push'
+import { ALL_ON, isIos, getNotificationPrefs, putNotificationPrefs, usePushStatus, type NotificationPrefs } from '../lib/push'
 import { apiErrorMessage } from '../lib/apiErrors'
 import { useShell } from '../shell/ShellContext'
 import { isDriverRole } from '../shell/types'
@@ -10,7 +10,7 @@ import { Button, Card } from './ui'
 export function NotificationSettings() {
   const { t } = useI18n()
   const { user, token, onToast, openInstall } = useShell()
-  const { status, busy, enable } = usePushStatus(token)
+  const { status, busy, enable, subscribed } = usePushStatus(token)
   const [prefs, setPrefs] = useState<NotificationPrefs>(ALL_ON)
   const [loaded, setLoaded] = useState(false)
   const driver = isDriverRole(user.role)
@@ -54,7 +54,9 @@ export function NotificationSettings() {
 
   const statusText =
     status === 'granted'
-      ? t('notifications.statusOn')
+      ? subscribed === true
+        ? t('notifications.statusOn')
+        : t('notifications.statusInactive')
       : status === 'denied'
         ? t('notifications.statusBlocked')
         : status === 'unsupported' || status === 'needs-install'
@@ -75,12 +77,12 @@ export function NotificationSettings() {
       <p>
         {t('notifications.statusLabel')}: <strong data-testid="push-status">{statusText}</strong>
       </p>
-      {status === 'default' && (
+      {(status === 'default' || (status === 'granted' && subscribed === false)) && (
         <Button variant="primary" size="lg" block disabled={busy} onClick={() => void onEnable()}>
           {t('notifications.enableButton')}
         </Button>
       )}
-      {status === 'denied' && <p className="muted tiny">{t('notifications.deniedOther')}</p>}
+      {status === 'denied' && <p className="muted tiny">{t(isIos() ? 'notifications.deniedIos' : 'notifications.deniedOther')}</p>}
       {status === 'needs-install' && (
         <>
           <p className="muted tiny">{t('notifications.needsInstall')}</p>
