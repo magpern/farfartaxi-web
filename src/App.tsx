@@ -6,7 +6,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState
@@ -30,7 +29,18 @@ import {
   type BookingDraft
 } from './lib/bookingDraft'
 import { haversine } from './lib/geo'
-import { isJwtExpired } from './lib/jwt'
+import { api, registerPendingApprovalHandler } from './api/client'
+import {
+  API_URL,
+  REFRESH_AHEAD_MS,
+  ensureFreshSession,
+  logoutRemote,
+  readStoredAuth,
+  registerSessionExpiredHandler,
+  subscribeAuthChange,
+  tokenExpiresWithin,
+  AUTH_STORAGE_KEY
+} from './lib/session'
 import { dedupeNominatimResults, formatNominatimAddress, type NominatimResult } from './lib/nominatim'
 import L from 'leaflet'
 import { registerSW } from 'virtual:pwa-register'
@@ -98,13 +108,6 @@ type BookingUserOption = {
   email: string
 }
 
-// In dev, always use same-origin `/api/...` so Vite's proxy reaches the backend.
-// A set VITE_API_URL (e.g. http://localhost:8080) bypasses the proxy and often causes
-// net::ERR_CONNECTION_REFUSED if the browser cannot reach that host:port.
-const API_URL = import.meta.env.DEV
-  ? ''
-  : (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '')
-
 /** Nominatim reverse zoom: keep fixed for stable labels. */
 const REVERSE_GEOCODE_DETAIL_ZOOM = 18
 
@@ -154,35 +157,24 @@ function notifySessionExpiredLogin(setAuth: Dispatch<SetStateAction<AuthResponse
   setAuth(null)
 }
 
-/** While the user is in the app (including booking / förboka), re-check often so expiry is caught before submit. */
-function useSessionExpiryWatch(token: string, setAuth: Dispatch<SetStateAction<AuthResponse | null>>) {
-  useLayoutEffect(() => {
-    if (isJwtExpired(token)) {
-      notifySessionExpiredLogin(setAuth)
-    }
-  }, [token, setAuth])
-
+/** Keep the access token fresh: refresh silently when it is expired or expires within 5 minutes. */
+function useSessionKeepAlive() {
   useEffect(() => {
-    const intervalMs = 5_000
-    const id = window.setInterval(() => {
-      if (isJwtExpired(token)) {
-        notifySessionExpiredLogin(setAuth)
-      }
-    }, intervalMs)
-    return () => window.clearInterval(id)
-  }, [token, setAuth])
-}
-
-let sessionExpiredHandler: (() => void) | undefined
-
-function registerSessionExpiredHandler(handler: (() => void) | undefined) {
-  sessionExpiredHandler = handler
-}
-
-let pendingApprovalHandler: (() => void) | undefined
-
-function registerPendingApprovalHandler(handler: (() => void) | undefined) {
-  pendingApprovalHandler = handler
+    const run = () => {
+      void ensureFreshSession()
+    }
+    const id = window.setInterval(run, 30_000)
+    const onVis = () => {
+      if (document.visibilityState === 'visible') run()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('online', run)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('online', run)
+    }
+  }, [])
 }
 
 const BookingDraftContext = createContext<{
@@ -210,17 +202,27 @@ function App() {
 
 function ProtectedApp() {
   const [auth, setAuth] = useLocalAuth()
-
-  useLayoutEffect(() => {
-    if (auth && isJwtExpired(auth.token)) {
-      notifySessionExpiredLogin(setAuth)
-    }
-  }, [auth, setAuth])
+  // An expired/expiring stored access token is not a dead session: try the refresh cookie before rendering.
+  const [booting, setBooting] = useState(() => {
+    const stored = readStoredAuth()
+    return !!stored && tokenExpiresWithin(stored.token, REFRESH_AHEAD_MS)
+  })
 
   useEffect(() => {
     registerSessionExpiredHandler(() => notifySessionExpiredLogin(setAuth))
     return () => registerSessionExpiredHandler(undefined)
   }, [setAuth])
+
+  useEffect(() => {
+    if (!booting) return
+    let cancelled = false
+    void ensureFreshSession().finally(() => {
+      if (!cancelled) setBooting(false)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [booting])
 
   // Any 403 PENDING_APPROVAL from api() flips the stored user to unapproved.
   useEffect(() => {
@@ -250,27 +252,18 @@ function ProtectedApp() {
     void refreshMe()
   }, [refreshMe])
 
-  useEffect(() => {
-    const onVis = () => {
-      if (document.visibilityState !== 'visible') return
-      setAuth((prev) => {
-        if (!prev || !isJwtExpired(prev.token)) return prev
-        markSessionExpiredLoginFlash()
-        return null
-      })
-    }
-    document.addEventListener('visibilitychange', onVis)
-    return () => document.removeEventListener('visibilitychange', onVis)
-  }, [setAuth])
-
   if (!auth) {
     return <Navigate to="/login" replace />
   }
+  if (booting) return null
   if (auth.user.approved === false) {
     return (
       <PendingApproval
         onRecheck={refreshMe}
-        onLogout={() => setAuth(null)}
+        onLogout={async () => {
+          await logoutRemote(auth.token)
+          setAuth(null)
+        }}
       />
     )
   }
@@ -563,7 +556,7 @@ function Dashboard({
   setAuth: Dispatch<SetStateAction<AuthResponse | null>>
 }) {
   const { t } = useI18n()
-  useSessionExpiryWatch(auth.token, setAuth)
+  useSessionKeepAlive()
   const [toast, setToast] = useState('')
   const [toastVisible, setToastVisible] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -658,12 +651,13 @@ function Dashboard({
             showPwaInstall={showPwaInstallMenu}
             onOpenPwaInstall={() => setPwaInstallOpen(true)}
             onClose={() => setMenuOpen(false)}
-            onLogout={() => {
+            onLogout={async () => {
               try {
                 sessionStorage.removeItem(BOOKING_DRAFT_STORAGE_KEY)
               } catch {
                 /* ignore */
               }
+              await logoutRemote(auth.token)
               setAuth(null)
             }}
           />
@@ -684,7 +678,7 @@ function SideMenu({
   showPwaInstall: boolean
   onOpenPwaInstall: () => void
   onClose: () => void
-  onLogout: () => void
+  onLogout: () => void | Promise<void>
 }) {
   const { t, locale, setLocale } = useI18n()
   return (
@@ -2006,6 +2000,16 @@ function AdminPage({
     load()
   }
 
+  async function logoutEverywhere(userId: number) {
+    if (!window.confirm(t('admin.logoutEverywhereConfirm'))) return
+    try {
+      await api(`/api/admin/users/${userId}/logout-everywhere`, { method: 'POST', token })
+      onToast(t('admin.toastLoggedOutEverywhere'))
+    } catch {
+      onToast(t('admin.toastActionFailed'))
+    }
+  }
+
   async function approveUser(userId: number) {
     try {
       await api(`/api/admin/users/${userId}/approve`, { method: 'POST', token })
@@ -2095,6 +2099,9 @@ function AdminPage({
                     {t('admin.demote')}
                   </button>
                 )}
+                <button type="button" className="btn" onClick={() => logoutEverywhere(u.id)}>
+                  {t('admin.logoutEverywhere')}
+                </button>
                 {u.hasLocalPassword && (
                   <button type="button" className="btn" onClick={() => forcePassword(u.id)}>
                     {t('admin.forcePassword')}
@@ -2178,65 +2185,30 @@ function normalizeStoredAuth(parsed: AuthResponse): AuthResponse {
   }
 }
 
+function readAuthFromStorage(): AuthResponse | null {
+  const stored = readStoredAuth()
+  if (!stored) return null
+  try {
+    return normalizeStoredAuth(stored as unknown as AuthResponse)
+  } catch {
+    return null
+  }
+}
+
 function useLocalAuth(): [AuthResponse | null, Dispatch<SetStateAction<AuthResponse | null>>] {
-  const [value, setValue] = useState<AuthResponse | null>(() => {
-    const raw = localStorage.getItem('farfartaxi-auth')
-    if (!raw) return null
-    try {
-      const parsed = normalizeStoredAuth(JSON.parse(raw) as AuthResponse)
-      if (isJwtExpired(parsed.token)) {
-        localStorage.removeItem('farfartaxi-auth')
-        return null
-      }
-      return parsed
-    } catch {
-      return null
-    }
-  })
+  // An expired access token is kept: the refresh cookie may still be valid (see ProtectedApp / lib/session).
+  const [value, setValue] = useState<AuthResponse | null>(readAuthFromStorage)
+  // Pick up tokens refreshed by this tab's session logic or by another tab (storage event).
+  useEffect(() => subscribeAuthChange(() => setValue(readAuthFromStorage())), [])
   const set = useCallback((next: SetStateAction<AuthResponse | null>) => {
     setValue((prev) => {
       const resolved = typeof next === 'function' ? (next as (p: AuthResponse | null) => AuthResponse | null)(prev) : next
-      if (!resolved) localStorage.removeItem('farfartaxi-auth')
-      else localStorage.setItem('farfartaxi-auth', JSON.stringify(resolved))
+      if (!resolved) localStorage.removeItem(AUTH_STORAGE_KEY)
+      else localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(resolved))
       return resolved
     })
   }, [])
   return [value, set]
-}
-
-async function api<T = unknown>(
-  path: string,
-  opts: { method?: string; token?: string; body?: string } = {}
-): Promise<T> {
-  const url = path.startsWith('http') ? path : `${API_URL}${path}`
-  const response = await fetch(url, {
-    method: opts.method ?? 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {})
-    },
-    body: opts.body
-  })
-  if (!response.ok) {
-    if (response.status === 401 && opts.token) {
-      sessionExpiredHandler?.()
-    }
-    let text = `Request failed (${response.status})`
-    try {
-      const payload = (await response.json()) as { error?: string; code?: string }
-      if (response.status === 403 && payload.code === 'PENDING_APPROVAL' && opts.token) {
-        pendingApprovalHandler?.()
-      }
-      if (payload.error) text = payload.error
-    } catch {
-      // ignored
-    }
-    throw new Error(text)
-  }
-  if (response.status === 204) return undefined as T
-  const contentType = response.headers.get('content-type') ?? ''
-  if (!contentType.includes('application/json')) return undefined as T
-  return (await response.json()) as T
 }
 
 function urlBase64ToUint8Array(base64String: string) {

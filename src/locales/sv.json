@@ -139,6 +139,9 @@
     "pushEnabled": "Push aktiverad."
   },
   "admin": {
+    "logoutEverywhere": "Logga ut överallt",
+    "logoutEverywhereConfirm": "Logga ut den här användaren från alla enheter?",
+    "toastLoggedOutEverywhere": "Användaren är utloggad överallt.",
     "users": "Användare",
     "promote": "Gör till förare",
     "promoteAdmin": "Gör till administratör",

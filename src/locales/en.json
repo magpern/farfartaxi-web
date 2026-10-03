@@ -139,6 +139,9 @@
     "pushEnabled": "Push enabled."
   },
   "admin": {
+    "logoutEverywhere": "Log out everywhere",
+    "logoutEverywhereConfirm": "Log this user out of all devices?",
+    "toastLoggedOutEverywhere": "User logged out everywhere.",
     "users": "Users",
     "promote": "Promote to driver",
     "promoteAdmin": "Promote to admin",
