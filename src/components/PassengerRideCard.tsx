@@ -10,11 +10,13 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { useRideMessages } from '../lib/rideMessages'
 import { QuickMessages } from './QuickMessages'
 import { RideMessages } from './RideMessages'
-import { RideTimeEdit } from './RideTimeEdit'
+import { RideTimeEdit, type RidePatch } from './RideTimeEdit'
 
 type Props = {
   ride: RideResponse
   token: string
+  /** Current user's id, used to attribute chat messages. */
+  userId: number
   onToast: (m: string) => void
   /** Reload the ride lists (called after every action, success or failure). */
   onChanged: () => Promise<void> | void
@@ -23,7 +25,7 @@ type Props = {
 }
 
 /** Passenger view of one ride. Every button comes from `ride.availableActions`, never from status checks. */
-export function PassengerRideCard({ ride, token, onToast, onChanged, onShare, onDelete }: Props) {
+export function PassengerRideCard({ ride, token, userId, onToast, onChanged, onShare, onDelete }: Props) {
   const { t, locale } = useI18n()
   const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
   const { busy, run } = useBusy()
@@ -66,12 +68,12 @@ export function PassengerRideCard({ ride, token, onToast, onChanged, onShare, on
       onToast(t('rides.keepWaitingToast'))
     })
 
-  const saveTime = (iso: string) =>
+  const saveEdit = (patch: RidePatch) =>
     act(async () => {
       const updated = await api<RideResponse>(`/api/rides/${ride.id}`, {
         method: 'PATCH',
         token,
-        body: JSON.stringify({ scheduledAt: iso })
+        body: JSON.stringify(patch)
       })
       setEditing(false)
       if (updated?.lastEditMaterial) {
@@ -146,7 +148,7 @@ export function PassengerRideCard({ ride, token, onToast, onChanged, onShare, on
       </div>
       <RideMessages
         messages={messages}
-        isMine={(m) => m.senderId === ride.passengerId}
+        isMine={(m) => m.senderId === userId}
         otherName={ride.acceptedByDriverName?.split(' ')[0] || t('messages.driverName')}
       />
       {hasAction(ride, 'MESSAGE') && (
@@ -166,10 +168,10 @@ export function PassengerRideCard({ ride, token, onToast, onChanged, onShare, on
       {editing && (
         <RideTimeEdit
           open
-          initialIso={ride.scheduledAt}
+          ride={ride}
           busy={busy}
           onCancel={() => setEditing(false)}
-          onSave={(iso) => void saveTime(iso)}
+          onSave={(patch) => void saveEdit(patch)}
         />
       )}
     </article>

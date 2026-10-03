@@ -14,6 +14,8 @@ import { RideMessages } from './RideMessages'
 type Props = {
   ride: RideResponse
   token: string
+  /** Current user's id, used to attribute chat messages. */
+  userId: number
   onToast: (m: string) => void
   /** Reload the ride lists (called after every action, success or failure). */
   onChanged: () => Promise<void> | void
@@ -28,7 +30,7 @@ const PRIMARY: Array<{ action: RideAction; path: string; labelKey: string; toast
   { action: 'COMPLETE', path: 'complete', labelKey: 'driver.complete', toastKey: 'driver.toastComplete' }
 ]
 
-export function DriverRideCard({ ride, token, onToast, onChanged }: Props) {
+export function DriverRideCard({ ride, token, userId, onToast, onChanged }: Props) {
   const { t, locale } = useI18n()
   const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
   const { busy, run } = useBusy()
@@ -105,6 +107,11 @@ export function DriverRideCard({ ride, token, onToast, onChanged }: Props) {
         {formatDateTime(ride.scheduledAt, dateLocale)} —{' '}
         <strong>{rideStatusLabel(t, ride.status, 'driver')}</strong>
       </p>
+      {ride.offerPriority && (
+        <p className="notice" role="status">
+          {t('driver.changedRide', { name: ride.passengerName?.split(' ')[0] || t('driver.passengerFallback') })}
+        </p>
+      )}
       {ride.passengerName && <p>{t('driver.passenger', { name: ride.passengerName })}</p>}
       {ride.pickupNote && <p className="tiny">{t('pickupNote.show', { note: ride.pickupNote })}</p>}
       {ride.etaMinutes != null && ride.etaMinutes > 0 && <p>{t('rides.eta', { min: ride.etaMinutes })}</p>}
@@ -143,7 +150,7 @@ export function DriverRideCard({ ride, token, onToast, onChanged }: Props) {
       </div>
       <RideMessages
         messages={messages}
-        isMine={(m) => m.senderId !== ride.passengerId}
+        isMine={(m) => m.senderId === userId}
         otherName={ride.passengerName?.split(' ')[0] || t('driver.passengerFallback')}
       />
       {hasAction(ride, 'MESSAGE') && (

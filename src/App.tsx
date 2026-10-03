@@ -609,10 +609,10 @@ function Dashboard({
           <Route index element={<BookingPage token={auth.token} currentUser={auth.user} onToast={setToast} />} />
           <Route path="forboka" element={<PreBookPage token={auth.token} currentUser={auth.user} onToast={setToast} />} />
           <Route path="bekraftelse" element={<BookingConfirmPage />} />
-          <Route path="resor" element={<MyRidesPage token={auth.token} onToast={setToast} />} />
+          <Route path="resor" element={<MyRidesPage token={auth.token} userId={auth.user.id} onToast={setToast} />} />
           <Route path="hjalp" element={<HelpPage />} />
           {(auth.user.role === 'DRIVER' || auth.user.role === 'ADMIN') && (
-            <Route path="forare" element={<DriverPage token={auth.token} onToast={setToast} />} />
+            <Route path="forare" element={<DriverPage token={auth.token} userId={auth.user.id} onToast={setToast} />} />
           )}
           {auth.user.role === 'ADMIN' && (
             <Route

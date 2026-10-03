@@ -18,7 +18,7 @@ function urlBase64ToUint8Array(base64String: string) {
   return outputArray
 }
 
-export function DriverPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
+export function DriverPage({ token, userId, onToast }: { token: string; userId: number; onToast: (m: string) => void }) {
   const { t } = useI18n()
   const [myRides, setMyRides] = useState<RideResponse[]>([])
   const [openRides, setOpenRides] = useState<RideResponse[]>([])
@@ -110,14 +110,14 @@ export function DriverPage({ token, onToast }: { token: string; onToast: (m: str
         <h3>{t('driver.myRides')}</h3>
         {myRides.length === 0 && <p>{t('driver.noMyRides')}</p>}
         {myRides.map((ride) => (
-          <DriverRideCard key={ride.id} ride={ride} token={token} onToast={onToast} onChanged={load} />
+          <DriverRideCard key={ride.id} ride={ride} token={token} userId={userId} onToast={onToast} onChanged={load} />
         ))}
       </div>
       <div className="card">
         <h3>{t('driver.openRides')}</h3>
         {openRides.length === 0 && <p>{t('driver.noOpenRides')}</p>}
         {openRides.map((ride) => (
-          <DriverRideCard key={ride.id} ride={ride} token={token} onToast={onToast} onChanged={load} />
+          <DriverRideCard key={ride.id} ride={ride} token={token} userId={userId} onToast={onToast} onChanged={load} />
         ))}
       </div>
     </div>

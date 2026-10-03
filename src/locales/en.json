@@ -129,15 +129,15 @@
     "cancelReason": "User cancelled",
     "feedbackComment": "Best grandpa!",
     "waiting": "We are asking the drivers right now.",
-    "noDriverHint": "Do you want to wait a little longer or cancel?",
+    "noDriverHint": "No driver has said yes yet. Keep waiting, change the time or call grandpa.",
     "keepWaiting": "Keep waiting",
     "keepWaitingToast": "We keep asking the drivers.",
-    "editTime": "Change time",
-    "editTitle": "Change time",
-    "editSave": "Save new time",
+    "editTime": "Change ride",
+    "editTitle": "Change ride",
+    "editSave": "Save changes",
     "editDate": "Date",
     "editSavedToast": "Time changed.",
-    "editMaterial": "The driver needs to confirm the change",
+    "editMaterial": "You changed the ride. The driver needs to confirm the change.",
     "futureTime": "Pick a time in the future.",
     "cancelConfirmTitle": "Cancel the ride?",
     "cancelConfirmBody": "The driver is already on the way. Do you really want to cancel?",
@@ -147,7 +147,12 @@
     "vehicle": "Car: {{note}}",
     "callDriver": "Call the driver",
     "kindNow": "Ride now",
-    "kindScheduled": "Pre-booked"
+    "kindScheduled": "Pre-booked",
+    "editDestination": "Destination",
+    "editSearchPlaceholder": "Search a new address",
+    "editSearchLabel": "Search address",
+    "editClearDestination": "Keep current",
+    "editNothingChanged": "Change something to save."
   },
   "driver": {
     "panel": "Driver panel",
@@ -200,7 +205,8 @@
     "awayClear": "Clear",
     "availabilitySaved": "Availability saved.",
     "awayInvalid": "The end date cannot be before the start date.",
-    "passengerFallback": "Passenger"
+    "passengerFallback": "Passenger",
+    "changedRide": "{{name}} changed the ride — confirm"
   },
   "admin": {
     "logoutEverywhere": "Log out everywhere",
@@ -264,10 +270,11 @@
     "footer": "Farfartaxi is family-friendly, fast, and fun to use."
   },
   "errors": {
-    "generic": "Something went wrong",
+    "generic": "Something went wrong. Try again.",
     "sessionExpired": "Your session has expired. Please log in again.",
     "bookingFuture": "Choose a date and time in the future.",
-    "bookingFailed": "Could not book: {{message}}"
+    "bookingFailed": "Could not book: {{message}}",
+    "offline": "No connection"
   },
   "languages": {
     "sv": "Svenska",

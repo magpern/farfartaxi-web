@@ -8,7 +8,7 @@ import type { RideResponse } from '../lib/rideTypes'
 import { formatDateTime } from '../lib/time'
 import { PassengerRideCard } from './PassengerRideCard'
 
-export function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
+export function MyRidesPage({ token, userId, onToast }: { token: string; userId: number; onToast: (m: string) => void }) {
   const { t, locale } = useI18n()
   const [upcoming, setUpcoming] = useState<RideResponse[]>([])
   const [history, setHistory] = useState<RideResponse[]>([])
@@ -81,6 +81,7 @@ export function MyRidesPage({ token, onToast }: { token: string; onToast: (m: st
             key={ride.id}
             ride={ride}
             token={token}
+            userId={userId}
             onToast={onToast}
             onChanged={load}
             onShare={share}

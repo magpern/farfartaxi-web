@@ -129,15 +129,15 @@
     "cancelReason": "Användaren avbokade",
     "feedbackComment": "Bästa farfar!",
     "waiting": "Vi frågar förarna just nu.",
-    "noDriverHint": "Vill du vänta lite till eller avboka?",
+    "noDriverHint": "Ingen förare har tackat ja än. Fortsätt vänta, ändra tiden eller ring farfar.",
     "keepWaiting": "Fortsätt vänta",
     "keepWaitingToast": "Vi fortsätter fråga förarna.",
-    "editTime": "Ändra tid",
-    "editTitle": "Ändra tid",
-    "editSave": "Spara ny tid",
+    "editTime": "Ändra resan",
+    "editTitle": "Ändra resan",
+    "editSave": "Spara ändringen",
     "editDate": "Datum",
     "editSavedToast": "Tiden är ändrad.",
-    "editMaterial": "Föraren behöver bekräfta ändringen",
+    "editMaterial": "Du ändrade resan. Föraren behöver bekräfta ändringen.",
     "futureTime": "Välj en tid i framtiden.",
     "cancelConfirmTitle": "Avboka resan?",
     "cancelConfirmBody": "Föraren är redan på väg. Vill du verkligen avboka?",
@@ -147,7 +147,12 @@
     "vehicle": "Bil: {{note}}",
     "callDriver": "Ring föraren",
     "kindNow": "Åk nu",
-    "kindScheduled": "Förbokad"
+    "kindScheduled": "Förbokad",
+    "editDestination": "Dit du ska",
+    "editSearchPlaceholder": "Sök ny adress",
+    "editSearchLabel": "Sök adress",
+    "editClearDestination": "Behåll nuvarande",
+    "editNothingChanged": "Ändra något för att spara."
   },
   "driver": {
     "panel": "Förarpanel",
@@ -200,7 +205,8 @@
     "awayClear": "Rensa",
     "availabilitySaved": "Tillgängligheten är sparad.",
     "awayInvalid": "Slutdatum kan inte vara före startdatum.",
-    "passengerFallback": "Passageraren"
+    "passengerFallback": "Passageraren",
+    "changedRide": "{{name}} ändrade resan — bekräfta"
   },
   "admin": {
     "logoutEverywhere": "Logga ut överallt",
@@ -264,10 +270,11 @@
     "footer": "Farfartaxi är familjevänlig, snabb och rolig att använda."
   },
   "errors": {
-    "generic": "Något gick fel",
+    "generic": "Något gick fel. Försök igen.",
     "sessionExpired": "Din session har gått ut. Logga in igen.",
     "bookingFuture": "Välj ett datum och tid i framtiden.",
-    "bookingFailed": "Kunde inte boka: {{message}}"
+    "bookingFailed": "Kunde inte boka: {{message}}",
+    "offline": "Ingen anslutning"
   },
   "languages": {
     "sv": "Svenska",

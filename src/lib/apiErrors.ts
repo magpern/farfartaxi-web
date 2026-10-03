@@ -18,11 +18,14 @@ export function isApiCode(err: unknown, code: string): boolean {
   return err instanceof ApiError && err.code === code
 }
 
-/** Friendly message for an action error: known 409 codes first, then the server text, then a generic one. */
+/** Friendly message for an action error. Known codes map to i18n text; raw server text is never shown. */
 export function apiErrorMessage(err: unknown, t: T): string {
-  if (err instanceof ApiError && err.code && (CONFLICT_CODES as readonly string[]).includes(err.code)) {
-    return t(`apiErrors.${err.code}`)
+  if (err instanceof ApiError) {
+    if (err.code && (CONFLICT_CODES as readonly string[]).includes(err.code)) return t(`apiErrors.${err.code}`)
+    if (err.status === 0) return t('errors.offline')
+    return t('errors.generic')
   }
-  if (err instanceof Error && err.message) return err.message
+  // fetch() rejects with a TypeError when the network is unreachable.
+  if (err instanceof TypeError) return t('errors.offline')
   return t('errors.generic')
 }

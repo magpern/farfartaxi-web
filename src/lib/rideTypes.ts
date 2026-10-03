@@ -53,6 +53,8 @@ export type RideResponse = {
   pickedUpAt?: string | null
   /** Only on PATCH responses. */
   lastEditMaterial?: boolean | null
+  /** Drivers only: true when this driver's offer is a priority re-offer after the passenger changed the ride. */
+  offerPriority?: boolean | null
   myOfferStatus?: string | null
   availableActions?: RideAction[] | null
 }

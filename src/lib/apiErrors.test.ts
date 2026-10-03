@@ -20,10 +20,16 @@ describe('apiErrorMessage', () => {
     }
   })
 
-  it('falls back to the server text, then a generic message', () => {
-    expect(apiErrorMessage(new ApiError('Boom', 500), t)).toBe('Boom')
-    expect(apiErrorMessage(new Error('Offline'), t)).toBe('Offline')
+  it('never shows raw server text or English fallbacks', () => {
+    expect(apiErrorMessage(new ApiError('Boom', 500), t)).toBe('Något gick fel. Försök igen.')
+    expect(apiErrorMessage(new ApiError('Request failed (400)', 400, 'WHATEVER'), t)).toBe(sv.errors.generic)
+    expect(apiErrorMessage(new Error('Offline'), t)).toBe(sv.errors.generic)
     expect(apiErrorMessage('weird', t)).toBe(sv.errors.generic)
+  })
+
+  it('shows "no connection" for status 0 and network failures', () => {
+    expect(apiErrorMessage(new ApiError('x', 0), t)).toBe('Ingen anslutning')
+    expect(apiErrorMessage(new TypeError('Failed to fetch'), t)).toBe('Ingen anslutning')
   })
 
   it('isApiCode checks the code', () => {
