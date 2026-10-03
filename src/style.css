@@ -1686,7 +1686,7 @@ a.link-back {
   background: none; border: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
 }
 .saved-icon { font-size: 1.5rem; }
-.saved-text { display: flex; flex-direction: column; min-width: 0; }
+.saved-text { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
 .saved-tools { display: flex; gap: 0.25rem; }
 .saved-tool {
   min-width: 48px; min-height: 48px; border-radius: 10px; border: 1px solid #334155; background: #1e293b;
