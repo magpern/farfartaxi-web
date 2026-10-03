@@ -7,7 +7,9 @@ import { hasAction, PASSENGER_MESSAGE_CODES, telHref, type RideResponse } from '
 import { formatDateTime } from '../lib/time'
 import { useBusy } from '../lib/useBusy'
 import { ConfirmDialog } from './ConfirmDialog'
+import { useRideMessages } from '../lib/rideMessages'
 import { QuickMessages } from './QuickMessages'
+import { RideMessages } from './RideMessages'
 import { RideTimeEdit } from './RideTimeEdit'
 
 type Props = {
@@ -25,6 +27,7 @@ export function PassengerRideCard({ ride, token, onToast, onChanged, onShare, on
   const { t, locale } = useI18n()
   const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
   const { busy, run } = useBusy()
+  const messages = useRideMessages(ride, token)
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [editing, setEditing] = useState(false)
   const [materialNotice, setMaterialNotice] = useState(false)
@@ -141,6 +144,11 @@ export function PassengerRideCard({ ride, token, onToast, onChanged, onShare, on
           </button>
         )}
       </div>
+      <RideMessages
+        messages={messages}
+        isMine={(m) => m.senderId === ride.passengerId}
+        otherName={ride.acceptedByDriverName?.split(' ')[0] || t('messages.driverName')}
+      />
       {hasAction(ride, 'MESSAGE') && (
         <QuickMessages codes={PASSENGER_MESSAGE_CODES} disabled={busy} onSend={sendMessage} />
       )}

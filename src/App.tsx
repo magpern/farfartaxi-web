@@ -1131,10 +1131,8 @@ function BookingPage({
 
   async function submitAkaNu(d: BookingDraft) {
     await runBooking(async () => {
-      const scheduledAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
-      const payload = buildRideBookPayload(d, 'NOW', scheduledAt)
-      // The payload changes every call (scheduledAt), so key on the stable part.
-      const key = idempotency.current.keyFor({ ...payload, scheduledAt: undefined })
+      const payload = buildRideBookPayload(d, 'NOW')
+      const key = idempotency.current.keyFor(payload)
       try {
         const ride = await api<RideResponse>('/api/rides', {
           method: 'POST',

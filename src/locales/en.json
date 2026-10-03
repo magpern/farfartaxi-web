@@ -199,7 +199,8 @@
     "awaySave": "Save",
     "awayClear": "Clear",
     "availabilitySaved": "Availability saved.",
-    "awayInvalid": "The end date cannot be before the start date."
+    "awayInvalid": "The end date cannot be before the start date.",
+    "passengerFallback": "Passenger"
   },
   "admin": {
     "logoutEverywhere": "Log out everywhere",
@@ -319,7 +320,9 @@
     "DRIVER_TWO_MIN": "There in 2 min",
     "DRIVER_LATE": "Running a bit late",
     "title": "Quick message",
-    "sentToast": "Message sent."
+    "sentToast": "Message sent.",
+    "you": "You",
+    "driverName": "Grandpa"
   },
   "pickupNote": {
     "label": "Message to the driver (optional)",

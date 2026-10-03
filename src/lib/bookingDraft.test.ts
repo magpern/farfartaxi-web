@@ -26,7 +26,8 @@ describe('buildRideBookPayload', () => {
     expect(buildRideBookPayload({ ...defaultDraft, passengerUserId: NaN }, 'NOW', 'x')).not.toHaveProperty('passengerUserId')
   })
   it('sends kind and a trimmed pickupNote only when present', () => {
-    expect(buildRideBookPayload(defaultDraft, 'NOW', 'x').kind).toBe('NOW')
+    expect(buildRideBookPayload(defaultDraft, 'NOW').kind).toBe('NOW')
+    expect(buildRideBookPayload(defaultDraft, 'NOW', 'x')).not.toHaveProperty('scheduledAt')
     expect(buildRideBookPayload(defaultDraft, 'NOW', 'x')).not.toHaveProperty('pickupNote')
     expect(buildRideBookPayload({ ...defaultDraft, pickupNote: '  Blå dörr ' }, 'NOW', 'x').pickupNote).toBe('Blå dörr')
     expect(buildRideBookPayload({ ...defaultDraft, pickupNote: ' ' }, 'NOW', 'x')).not.toHaveProperty('pickupNote')

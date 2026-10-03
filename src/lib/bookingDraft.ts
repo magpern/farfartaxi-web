@@ -61,14 +61,11 @@ export function writeBookingDraftToStorage(d: BookingDraft) {
   }
 }
 
-/**
- * NOW rides ignore scheduledAt on the server (it uses server time); we still send a near-future
- * value so older backends that validate the field keep working.
- */
+/** NOW rides omit scheduledAt (the server uses its own clock); SCHEDULED rides require it. */
 export function buildRideBookPayload(
   draft: BookingDraft,
   kind: 'NOW' | 'SCHEDULED',
-  scheduledAtIso: string
+  scheduledAtIso?: string
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {
     kind,
@@ -77,9 +74,9 @@ export function buildRideBookPayload(
     fromLon: draft.fromLon,
     toAddress: draft.toAddress,
     toLat: draft.toLat,
-    toLon: draft.toLon,
-    scheduledAt: scheduledAtIso
+    toLon: draft.toLon
   }
+  if (kind === 'SCHEDULED' && scheduledAtIso) body.scheduledAt = scheduledAtIso
   if (typeof draft.passengerUserId === 'number' && Number.isFinite(draft.passengerUserId)) {
     body.passengerUserId = draft.passengerUserId
   }

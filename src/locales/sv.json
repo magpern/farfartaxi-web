@@ -199,7 +199,8 @@
     "awaySave": "Spara",
     "awayClear": "Rensa",
     "availabilitySaved": "Tillgängligheten är sparad.",
-    "awayInvalid": "Slutdatum kan inte vara före startdatum."
+    "awayInvalid": "Slutdatum kan inte vara före startdatum.",
+    "passengerFallback": "Passageraren"
   },
   "admin": {
     "logoutEverywhere": "Logga ut överallt",
@@ -319,7 +320,9 @@
     "DRIVER_TWO_MIN": "Är där om 2 min",
     "DRIVER_LATE": "Blir lite sen",
     "title": "Snabbmeddelande",
-    "sentToast": "Meddelandet skickades."
+    "sentToast": "Meddelandet skickades.",
+    "you": "Du",
+    "driverName": "Farfar"
   },
   "pickupNote": {
     "label": "Meddelande till föraren (valfritt)",
