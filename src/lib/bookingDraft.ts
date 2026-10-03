@@ -84,3 +84,13 @@ export function buildRideBookPayload(
   if (note) body.pickupNote = note.slice(0, 280)
   return body
 }
+
+/** True when the user has typed anything into the booking flow (used by the update guard). */
+export function draftInProgress(d: BookingDraft): boolean {
+  return (
+    d.fromAddress.trim() !== '' ||
+    d.toAddress.trim() !== '' ||
+    (d.pickupNote ?? '').trim() !== '' ||
+    d.passengerUserId != null
+  )
+}

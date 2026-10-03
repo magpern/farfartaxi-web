@@ -1,4 +1,5 @@
 import { useEffect, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useOverlayOpen } from './components/ui/overlayRegistry'
 
 const CX = 120
 const CY = 120
@@ -70,6 +71,7 @@ export function Clock24hTimePicker({
   keyboardHourLabel,
   keyboardMinuteLabel
 }: Clock24hTimePickerProps) {
+  useOverlayOpen(open)
   const [mode, setMode] = useState<Mode>('hour')
   const [hour, setHour] = useState(initialHour)
   const [minute, setMinute] = useState(initialMinute)

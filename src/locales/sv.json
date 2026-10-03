@@ -7,7 +7,8 @@
     "cancel": "Avbryt",
     "close": "Stäng",
     "working": "Vänta…",
-    "call": "Ring"
+    "call": "Ring",
+    "loading": "Hämtar…"
   },
   "landing": {
     "subtitle": "Boka familjens tryggaste taxi. Enkel, snabb och mobilanpassad.",
@@ -105,8 +106,7 @@
     "title": "Resan är bokad!",
     "from": "Från:",
     "to": "Till:",
-    "time": "Tid:",
-    "rideId": "Res-ID:"
+    "time": "Tid:"
   },
   "rides": {
     "backToBooking": "Tillbaka till bokning",
@@ -121,13 +121,11 @@
     "shareTrip": "Dela resa",
     "shareTripHint": "Kopierar en tidsbegränsad länk så familjen kan följa live-ETA i webbläsaren utan att logga in.",
     "cancelReasonAfterAccept": "Passageraren avbokade resan",
-    "thanksStars": "Tack + 5★",
     "cancelledToast": "Resan avbokad.",
     "deletedToast": "Resan borttagen från din lista.",
     "shareCopiedToast": "Delningslänk kopierad.",
     "feedbackThanksToast": "Tack för din feedback!",
     "cancelReason": "Användaren avbokade",
-    "feedbackComment": "Bästa farfar!",
     "waiting": "Vi frågar förarna just nu.",
     "noDriverHint": "Ingen förare har tackat ja än. Fortsätt vänta, ändra tiden eller ring farfar.",
     "keepWaiting": "Fortsätt vänta",
@@ -152,7 +150,13 @@
     "editSearchPlaceholder": "Sök ny adress",
     "editSearchLabel": "Sök adress",
     "editClearDestination": "Behåll nuvarande",
-    "editNothingChanged": "Ändra något för att spara."
+    "editNothingChanged": "Ändra något för att spara.",
+    "open": "Öppna",
+    "smsDriver": "SMS",
+    "groupOngoing": "Pågående",
+    "groupUpcoming": "Kommande",
+    "groupPast": "Tidigare",
+    "noOngoing": "Ingen pågående resa."
   },
   "driver": {
     "panel": "Förarpanel",
@@ -198,6 +202,9 @@
     "toastReturned": "Resan är tillbaka i kön.",
     "availabilityTitle": "Tillgänglighet",
     "availableNow": "Tillgänglig nu",
+    "notAvailable": "Inte tillgänglig",
+    "awaySummary": "Bortrest?",
+    "awayActive": "Bortrest – ändra datum",
     "awayTitle": "Bortrest (valfritt)",
     "awayFrom": "Från",
     "awayUntil": "Till",
@@ -206,7 +213,20 @@
     "availabilitySaved": "Tillgängligheten är sparad.",
     "awayInvalid": "Slutdatum kan inte vara före startdatum.",
     "passengerFallback": "Passageraren",
-    "changedRide": "{{name}} ändrade resan — bekräfta"
+    "changedRide": "{{name}} ändrade resan — bekräfta",
+    "smsPassenger": "SMS",
+    "openDriving": "Öppna körläge",
+    "continueDriving": "Fortsätt köra",
+    "nextRide": "Nästa resa: hämta {{name}}",
+    "todayRides": "Mina resor idag",
+    "noTodayRides": "Inga resor idag.",
+    "allMyRides": "Alla mina resor",
+    "bookRide": "Boka resa",
+    "modeDrive": "Jag kör",
+    "modeRide": "Jag åker",
+    "groupToday": "Idag",
+    "groupUpcoming": "Kommande",
+    "groupPast": "Tidigare"
   },
   "admin": {
     "logoutEverywhere": "Logga ut överallt",
@@ -257,15 +277,18 @@
     "manualAndroid": "Android: öppna menyn (⋮) och välj «Installera app» eller «Lägg till på startskärmen».",
     "manualDesktop": "Dator: använd installera-ikonen i adressfältet eller menyn (t.ex. «Installera Farfartaxi» / «Appar»).",
     "helpCalloutTitle": "Lägg till på hemskärmen",
-    "helpCalloutLead": "Öppna menyn (☰) och välj «Lägg till på hemskärmen», eller följ anvisningarna för din enhet nedan."
+    "helpCalloutLead": "Öppna fliken Mer och välj «Lägg till på hemskärmen», eller följ anvisningarna för din enhet nedan.",
+    "newVersion": "Ny version finns",
+    "update": "Uppdatera"
   },
   "help": {
     "title": "Hjälp och vanliga frågor",
     "items": [
-      "Meny (☰) → «Lägg till på hemskärmen» — eller vänta på frågan efter inloggning.",
+      "Mer → «Lägg till på hemskärmen» — eller vänta på frågan efter inloggning.",
       "Tillåt notiser för att få bokningsuppdateringar.",
       "Förare bör ha appen öppen för bättre live-ETA via GPS.",
-      "Använd \"Dela resa\" för att dela ETA med familjen."
+      "Använd \"Dela resa\" för att dela ETA med familjen.",
+      "Behöver du större text? Mer → Stor text."
     ],
     "footer": "Farfartaxi är familjevänlig, snabb och rolig att använda."
   },
@@ -336,5 +359,100 @@
     "placeholder": "T.ex. blå dörr, ring på porttelefonen",
     "count": "{{n}}/280",
     "show": "Meddelande: {{note}}"
+  },
+  "tabs": {
+    "aria": "Huvudnavigering",
+    "book": "Boka",
+    "rides": "Mina resor",
+    "places": "Platser",
+    "more": "Mer",
+    "requests": "Förfrågningar"
+  },
+  "activeRide": {
+    "headline": {
+      "REQUESTED": "Vi letar efter en förare…",
+      "NO_DRIVER": "Ingen förare har tackat ja än",
+      "ACCEPTED": "{{name}} hämtar dig",
+      "EN_ROUTE": "{{name}} är på väg",
+      "ARRIVED": "{{name}} är framme – kom ut!",
+      "PICKED_UP": "Du är på väg",
+      "COMPLETED": "Framme! Tack för åkturen",
+      "CANCELLED": "Resan är avbokad",
+      "UNKNOWN": "Din resa"
+    },
+    "gone": "Resan finns inte längre.",
+    "unreachable": "Kunde inte nå servern. Försök igen om en stund.",
+    "toHome": "Till start",
+    "bookNew": "Boka ny resa",
+    "bookAnother": "Boka en till resa",
+    "open": "Öppna resan"
+  },
+  "contact": {
+    "call": "Ring",
+    "sms": "SMS",
+    "callAria": "Ring {{name}}",
+    "smsAria": "Skicka SMS till {{name}}"
+  },
+  "lastUpdated": {
+    "stale": "Kunde inte nå servern – visar senast kända uppgifter."
+  },
+  "bookingConfirm": {
+    "title": "Stämmer det här?",
+    "who": "Vem",
+    "when": "När",
+    "pickup": "Hämtas",
+    "destination": "Åker till",
+    "note": "Meddelande",
+    "noNote": "Inget meddelande",
+    "now": "Nu – så snart en förare tackar ja",
+    "edit": "Ändra",
+    "editAria": "Ändra {{what}}",
+    "chooseTime": "Välj tid",
+    "chooseTimeAria": "Välj en annan tid (förboka)",
+    "forName": "För {{name}}",
+    "bookedBy": "Bokas av {{name}}",
+    "confirmNow": "Ja, boka nu",
+    "confirmLater": "Ja, boka resan"
+  },
+  "rating": {
+    "title": "Hur var resan?",
+    "send": "Skicka",
+    "starsAria": "Betyg",
+    "starAria": "{{n}} av 5 stjärnor",
+    "commentLabel": "Vill du skriva något? (valfritt)",
+    "commentPlaceholder": "T.ex. tack för skjutsen!",
+    "cta": "Betygsätt resan"
+  },
+  "driving": {
+    "back": "‹ Förfrågningar",
+    "pickup": "Hämta här",
+    "destination": "Kör till",
+    "pickupTime": "Hämtning kl {{time}}",
+    "thenTo": "Sedan till",
+    "noteFrom": "Meddelande från {{name}}:",
+    "done": "Klart – tillbaka",
+    "headline": {
+      "ACCEPTED": "Dags att hämta {{name}}",
+      "EN_ROUTE": "Kör för att hämta {{name}}",
+      "ARRIVED": "Du är framme hos {{name}}",
+      "PICKED_UP": "{{name}} är med – kör till målet",
+      "COMPLETED": "Klart! Bra jobbat",
+      "CANCELLED": "Resan är avbokad",
+      "OTHER": "Resan"
+    }
+  },
+  "places": {
+    "comingTitle": "Kommer snart",
+    "comingBody": "Här kan du snart spara hem, skolan och andra favoritplatser."
+  },
+  "more": {
+    "largeText": "Stor text",
+    "largeTextHint": "Gör all text i appen större"
+  },
+  "network": {
+    "offline": "Ingen anslutning",
+    "unreachable": "Kunde inte nå servern — försöker igen",
+    "actionFailed": "Kunde inte nå servern — försök igen",
+    "lastUpdated": "Senast uppdaterad {{time}}"
   }
 }

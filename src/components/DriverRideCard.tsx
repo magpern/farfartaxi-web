@@ -1,15 +1,13 @@
-import { useState } from 'react'
-import { api, ApiError } from '../api/client'
 import { useI18n } from '../i18n/context'
-import { apiErrorMessage } from '../lib/apiErrors'
-import { rideStatusLabel } from '../lib/rideStatus'
-import { DRIVER_MESSAGE_CODES, hasAction, telHref, type RideAction, type RideResponse } from '../lib/rideTypes'
-import { formatDateTime, formatHm } from '../lib/time'
-import { useBusy } from '../lib/useBusy'
-import { ConfirmDialog } from './ConfirmDialog'
+import { DRIVER_MESSAGE_CODES, hasAction, smsHref, telHref, type RideResponse } from '../lib/rideTypes'
+import { formatWeekdayDateTime } from '../lib/time'
 import { useRideMessages } from '../lib/rideMessages'
 import { QuickMessages } from './QuickMessages'
 import { RideMessages } from './RideMessages'
+import { DRIVER_STEPS, useDriverRideActions } from './rideActions'
+import { Button } from './ui/Button'
+import { ConfirmDialog } from './ui/ConfirmDialog'
+import { StatusPill } from './ui/StatusPill'
 
 type Props = {
   ride: RideResponse
@@ -19,185 +17,121 @@ type Props = {
   onToast: (m: string) => void
   /** Reload the ride lists (called after every action, success or failure). */
   onChanged: () => Promise<void> | void
+  /** Open driving mode for this ride. */
+  onOpen?: (rideId: number) => void
 }
 
-/** Progress/primary actions in the order a driver meets them, mapped to endpoint + toast key. */
-const PRIMARY: Array<{ action: RideAction; path: string; labelKey: string; toastKey?: string }> = [
-  { action: 'ACCEPT', path: 'accept', labelKey: 'driver.takeRide', toastKey: 'driver.toastAccepted' },
-  { action: 'START', path: 'start', labelKey: 'driver.driveNow', toastKey: 'driver.toastStartDriving' },
-  { action: 'ARRIVE', path: 'arrive', labelKey: 'driver.arrived' },
-  { action: 'PICKUP', path: 'pickup', labelKey: 'driver.pickedUp' },
-  { action: 'COMPLETE', path: 'complete', labelKey: 'driver.complete', toastKey: 'driver.toastComplete' }
-]
-
-export function DriverRideCard({ ride, token, userId, onToast, onChanged }: Props) {
+/** Driver request/ride card: big text, big buttons. Buttons come from `ride.availableActions`. */
+export function DriverRideCard({ ride, token, userId, onToast, onChanged, onOpen }: Props) {
   const { t, locale } = useI18n()
   const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
-  const { busy, run } = useBusy()
   const messages = useRideMessages(ride, token)
-  const [proximity, setProximity] = useState<{ time: string | null } | null>(null)
-  const [returning, setReturning] = useState(false)
-  const [reason, setReason] = useState('')
-
-  const act = (fn: () => Promise<void>) =>
-    run(async () => {
-      try {
-        await fn()
-      } catch (err) {
-        if (err instanceof ApiError && err.code === 'PROXIMITY_WARNING') {
-          const conflicting = err.body?.conflictingRide as { scheduledAt?: string } | undefined
-          setProximity({ time: conflicting?.scheduledAt ? formatHm(conflicting.scheduledAt) : null })
-        } else {
-          onToast(apiErrorMessage(err, t))
-        }
-      } finally {
-        try {
-          await onChanged()
-        } catch {
-          /* the page's polling will retry */
-        }
-      }
-    })
-
-  const post = (path: string, body?: unknown) =>
-    api(`/api/driver/rides/${ride.id}/${path}`, {
-      method: 'POST',
-      token,
-      body: body === undefined ? undefined : JSON.stringify(body)
-    })
-
-  const accept = (confirmProximity: boolean) =>
-    act(async () => {
-      await post('accept', confirmProximity ? { confirmProximity: true } : undefined)
-      setProximity(null)
-      onToast(t('driver.toastAccepted'))
-    })
-
-  const simple = (path: string, toastKey?: string) =>
-    act(async () => {
-      await post(path)
-      if (toastKey) onToast(t(toastKey))
-    })
-
-  const decline = () =>
-    act(async () => {
-      await post('decline', { comment: t('driver.refuseComment') })
-      onToast(t('driver.toastRefused'))
-    })
-
-  const giveBack = () =>
-    act(async () => {
-      const text = reason.trim()
-      await post('return', text ? { reason: text } : {})
-      setReturning(false)
-      setReason('')
-      onToast(t('driver.toastReturned'))
-    })
-
-  const reasonRequired = ride.status === 'EN_ROUTE'
-  const hasProgress = PRIMARY.some((p) => hasAction(ride, p.action))
+  const a = useDriverRideActions({ ride, token, onToast, onChanged })
+  const hasProgress = DRIVER_STEPS.some((p) => hasAction(ride, p.action))
+  const firstName = ride.passengerName?.split(' ')[0] || t('driver.passengerFallback')
 
   return (
-    <article className={`ride-item ${ride.urgent ? 'ride-urgent' : ''}`}>
+    <article className={`ride-item driver-ride ${ride.urgent ? 'ride-urgent' : ''}`}>
       {ride.urgent && <p className="badge-urgent">{t('driver.urgent')}</p>}
-      <p>
+      <p className="driver-ride-who">
+        {ride.passengerName ? t('driver.passenger', { name: ride.passengerName }) : t('driver.passengerFallback')}
+      </p>
+      <p className="driver-ride-when">{formatWeekdayDateTime(ride.scheduledAt, dateLocale)}</p>
+      <p className="driver-ride-route">
         <strong>{ride.fromAddress}</strong> {t('rides.toWord')} <strong>{ride.toAddress}</strong>
       </p>
       <p>
-        {formatDateTime(ride.scheduledAt, dateLocale)} —{' '}
-        <strong>{rideStatusLabel(t, ride.status, 'driver')}</strong>
+        <StatusPill status={ride.status} perspective="driver" />
       </p>
       {ride.offerPriority && (
         <p className="notice" role="status">
-          {t('driver.changedRide', { name: ride.passengerName?.split(' ')[0] || t('driver.passengerFallback') })}
+          {t('driver.changedRide', { name: firstName })}
         </p>
       )}
-      {ride.passengerName && <p>{t('driver.passenger', { name: ride.passengerName })}</p>}
-      {ride.pickupNote && <p className="tiny">{t('pickupNote.show', { note: ride.pickupNote })}</p>}
+      {ride.pickupNote && <p className="driver-note">{t('pickupNote.show', { note: ride.pickupNote })}</p>}
       {ride.etaMinutes != null && ride.etaMinutes > 0 && <p>{t('rides.eta', { min: ride.etaMinutes })}</p>}
       <div className="row ride-actions">
-        {PRIMARY.filter((p) => hasAction(ride, p.action)).map((p) => (
-          <button
+        {DRIVER_STEPS.filter((p) => hasAction(ride, p.action)).map((p) => (
+          <Button
             key={p.action}
-            type="button"
-            className="btn btn-driver btn-primary"
-            disabled={busy}
-            onClick={() => (p.action === 'ACCEPT' ? void accept(false) : void simple(p.path, p.toastKey))}
+            variant="primary"
+            size="lg"
+            disabled={a.busy}
+            onClick={() => (p.action === 'ACCEPT' ? void a.accept(false) : void a.simple(p.path, p.toastKey))}
           >
-            {busy ? t('common.working') : t(p.labelKey)}
-          </button>
+            {a.busy ? t('common.working') : t(p.labelKey)}
+          </Button>
         ))}
         {hasAction(ride, 'DECLINE') && (
-          <button
-            type="button"
-            className={`btn btn-driver ${hasProgress ? '' : 'btn-outline'}`}
-            disabled={busy}
-            onClick={() => void decline()}
-          >
+          <Button size="lg" variant={hasProgress ? 'secondary' : 'ghost'} disabled={a.busy} onClick={() => void a.decline()}>
             {t('driver.cannot')}
-          </button>
+          </Button>
         )}
         {hasAction(ride, 'RETURN') && (
-          <button type="button" className="btn btn-driver" disabled={busy} onClick={() => setReturning(true)}>
+          <Button size="lg" disabled={a.busy} onClick={() => a.setReturning(true)}>
             {t('driver.giveBack')}
-          </button>
+          </Button>
+        )}
+        {onOpen && ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'PICKED_UP'].includes(ride.status) && (
+          <Button size="lg" onClick={() => onOpen(ride.id)}>
+            {t('driver.openDriving')}
+          </Button>
         )}
         {ride.passengerPhone && (
-          <a className="btn btn-driver" href={telHref(ride.passengerPhone)}>
-            {t('driver.callPassenger')}
-          </a>
+          <>
+            <Button size="lg" href={telHref(ride.passengerPhone)}>
+              {t('driver.callPassenger')}
+            </Button>
+            <Button size="lg" href={smsHref(ride.passengerPhone)}>
+              {t('driver.smsPassenger')}
+            </Button>
+          </>
         )}
       </div>
-      <RideMessages
-        messages={messages}
-        isMine={(m) => m.senderId === userId}
-        otherName={ride.passengerName?.split(' ')[0] || t('driver.passengerFallback')}
-      />
+      <RideMessages messages={messages} isMine={(m) => m.senderId === userId} otherName={firstName} />
       {hasAction(ride, 'MESSAGE') && (
-        <QuickMessages
-          codes={DRIVER_MESSAGE_CODES}
-          large
-          disabled={busy}
-          onSend={(code) =>
-            void act(async () => {
-              await api(`/api/rides/${ride.id}/messages`, { method: 'POST', token, body: JSON.stringify({ code }) })
-              onToast(t('messages.sentToast'))
-            })
-          }
-        />
+        <QuickMessages codes={DRIVER_MESSAGE_CODES} large disabled={a.busy} onSend={(c) => void a.sendMessage(c)} />
       )}
+      <DriverDialogs a={a} />
+    </article>
+  )
+}
+
+/** Proximity warning + return dialogs, shared with driving mode. */
+export function DriverDialogs({ a }: { a: ReturnType<typeof useDriverRideActions> }) {
+  const { t } = useI18n()
+  return (
+    <>
       <ConfirmDialog
-        open={proximity !== null}
+        open={a.proximity !== null}
         title={t('driver.proximityTitle')}
-        body={
-          proximity?.time ? t('driver.proximityBody', { time: proximity.time }) : t('driver.proximityBodyNoTime')
-        }
+        body={a.proximity?.time ? t('driver.proximityBody', { time: a.proximity.time }) : t('driver.proximityBodyNoTime')}
         confirmLabel={t('driver.proximityYes')}
         cancelLabel={t('common.cancel')}
-        busy={busy}
-        onCancel={() => setProximity(null)}
-        onConfirm={() => void accept(true)}
+        busy={a.busy}
+        onCancel={() => a.setProximity(null)}
+        onConfirm={() => void a.accept(true)}
       />
       <ConfirmDialog
-        open={returning}
+        open={a.returning}
         title={t('driver.returnTitle')}
         confirmLabel={t('driver.returnYes')}
         cancelLabel={t('common.cancel')}
-        busy={busy}
-        confirmDisabled={reasonRequired && reason.trim() === ''}
-        onCancel={() => setReturning(false)}
-        onConfirm={() => void giveBack()}
+        busy={a.busy}
+        confirmDisabled={a.reasonRequired && a.reason.trim() === ''}
+        onCancel={() => a.setReturning(false)}
+        onConfirm={() => void a.giveBack()}
       >
         <textarea
           className="sheet-input"
           rows={2}
           maxLength={200}
-          value={reason}
-          aria-label={reasonRequired ? t('driver.returnReasonRequired') : t('driver.returnReasonOptional')}
-          placeholder={reasonRequired ? t('driver.returnReasonRequired') : t('driver.returnReasonOptional')}
-          onChange={(e) => setReason(e.target.value)}
+          value={a.reason}
+          aria-label={a.reasonRequired ? t('driver.returnReasonRequired') : t('driver.returnReasonOptional')}
+          placeholder={a.reasonRequired ? t('driver.returnReasonRequired') : t('driver.returnReasonOptional')}
+          onChange={(e) => a.setReason(e.target.value)}
         />
       </ConfirmDialog>
-    </article>
+    </>
   )
 }

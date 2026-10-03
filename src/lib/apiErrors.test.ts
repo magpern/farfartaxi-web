@@ -27,9 +27,9 @@ describe('apiErrorMessage', () => {
     expect(apiErrorMessage('weird', t)).toBe(sv.errors.generic)
   })
 
-  it('shows "no connection" for status 0 and network failures', () => {
-    expect(apiErrorMessage(new ApiError('x', 0), t)).toBe('Ingen anslutning')
-    expect(apiErrorMessage(new TypeError('Failed to fetch'), t)).toBe('Ingen anslutning')
+  it('shows the action-failed message for network failures', () => {
+    expect(apiErrorMessage(new ApiError('x', 0), t)).toBe('Kunde inte nå servern — försök igen')
+    expect(apiErrorMessage(new TypeError('Failed to fetch'), t)).toBe('Kunde inte nå servern — försök igen')
   })
 
   it('isApiCode checks the code', () => {

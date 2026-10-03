@@ -1,3 +1,4 @@
+import { setBackendUnreachable } from '../lib/network/state'
 import { API_URL, notifySessionExpired, recoverFromUnauthorized } from '../lib/session'
 
 let pendingApprovalHandler: (() => void) | undefined
@@ -22,29 +23,87 @@ export class ApiError extends Error {
   }
 }
 
-type ApiOpts = { method?: string; token?: string; body?: string; headers?: Record<string, string> }
+export const DEFAULT_TIMEOUT_MS = 12_000
 
-function send(url: string, opts: ApiOpts, token: string | undefined) {
-  return fetch(url, {
-    method: opts.method ?? 'GET',
-    credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-      ...opts.headers,
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
-    },
-    body: opts.body
-  })
+type ApiOpts = {
+  method?: string
+  token?: string
+  body?: string
+  headers?: Record<string, string>
+  /** Abort and throw ApiError(status 0, code TIMEOUT) after this many ms (default 12 s). */
+  timeoutMs?: number
+}
+
+function networkError(code: 'NETWORK' | 'TIMEOUT'): ApiError {
+  return new ApiError(code === 'TIMEOUT' ? 'Request timed out' : 'Network error', 0, code)
+}
+
+async function send(url: string, opts: ApiOpts, token: string | undefined): Promise<Response> {
+  const controller = new AbortController()
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+  try {
+    const response = await fetch(url, {
+      method: opts.method ?? 'GET',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        ...opts.headers,
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      },
+      body: opts.body,
+      signal: controller.signal
+    })
+    // 502/503/504 come from the reverse proxy while the backend restarts: treat as unreachable.
+    setBackendUnreachable(response.status === 502 || response.status === 503 || response.status === 504)
+    return response
+  } catch {
+    setBackendUnreachable(true)
+    throw networkError(timedOut ? 'TIMEOUT' : 'NETWORK')
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Only idempotent reads are retried (once, on a plain network error). Mutations are never retried or queued. */
+async function sendWithRetry(url: string, opts: ApiOpts, token: string | undefined): Promise<Response> {
+  const isGet = (opts.method ?? 'GET').toUpperCase() === 'GET'
+  try {
+    return await send(url, opts, token)
+  } catch (e) {
+    if (isGet && e instanceof ApiError && e.code === 'NETWORK') return send(url, opts, token)
+    throw e
+  }
+}
+
+let inFlightMutations = 0
+/** Number of non-GET api() calls currently in flight; the PWA update guard must not reload while > 0. */
+export function getInFlightMutations(): number {
+  return inFlightMutations
 }
 
 export async function api<T = unknown>(path: string, opts: ApiOpts = {}): Promise<T> {
+  const isMutation = (opts.method ?? 'GET').toUpperCase() !== 'GET'
+  if (!isMutation) return apiInner<T>(path, opts)
+  inFlightMutations += 1
+  try {
+    return await apiInner<T>(path, opts)
+  } finally {
+    inFlightMutations -= 1
+  }
+}
+
+async function apiInner<T>(path: string, opts: ApiOpts): Promise<T> {
   const url = path.startsWith('http') ? path : `${API_URL}${path}`
-  let response = await send(url, opts, opts.token)
+  let response = await sendWithRetry(url, opts, opts.token)
 
   if (response.status === 401 && opts.token && !NO_REFRESH_PATHS.test(path)) {
     const fresh = await recoverFromUnauthorized(opts.token)
     if (fresh) {
-      response = await send(url, opts, fresh)
+      response = await sendWithRetry(url, opts, fresh)
       if (response.status === 401) notifySessionExpired()
     }
   }

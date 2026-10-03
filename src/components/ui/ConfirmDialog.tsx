@@ -1,4 +1,7 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
+import { Button } from './Button'
+import { useOverlayOpen } from './overlayRegistry'
+import { useModalFocus } from './useModalFocus'
 
 type Props = {
   open: boolean
@@ -14,7 +17,7 @@ type Props = {
   children?: ReactNode
 }
 
-/** Minimal modal confirm; M2 replaces this with the shared ui/ConfirmDialog. */
+/** Modal confirm: big buttons, cancel on the left, confirm on the right. */
 export function ConfirmDialog({
   open,
   title,
@@ -28,6 +31,9 @@ export function ConfirmDialog({
   danger,
   children
 }: Props) {
+  const ref = useRef<HTMLDivElement>(null)
+  useOverlayOpen(open)
+  useModalFocus(open, onCancel, ref)
   if (!open) return null
   return (
     <div
@@ -39,22 +45,22 @@ export function ConfirmDialog({
         if (e.target === e.currentTarget) onCancel()
       }}
     >
-      <div className="card install-modal-card" onClick={(e) => e.stopPropagation()}>
+      <div ref={ref} tabIndex={-1} className="card install-modal-card" onClick={(e) => e.stopPropagation()}>
         <h3>{title}</h3>
         {body && <p className="install-modal-lead">{body}</p>}
         {children}
         <div className="install-modal-actions">
-          <button type="button" className="btn btn-touch btn-outline" onClick={onCancel} disabled={busy}>
+          <Button variant="secondary" size="lg" onClick={onCancel} disabled={busy}>
             {cancelLabel}
-          </button>
-          <button
-            type="button"
-            className={`btn btn-touch ${danger ? 'btn-danger' : 'btn-primary'}`}
+          </Button>
+          <Button
+            variant={danger ? 'danger' : 'primary'}
+            size="lg"
             onClick={onConfirm}
             disabled={busy || confirmDisabled}
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

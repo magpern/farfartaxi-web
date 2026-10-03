@@ -4,7 +4,7 @@ import { useI18n } from '../i18n/context'
 import { formatYmd, stockholmLocalToInstant, stockholmParts } from '../lib/time'
 import { PICKUP_NOTE_MAX, type RideResponse } from '../lib/rideTypes'
 import { AddressSearch, type PickedAddress } from './AddressSearch'
-import { ConfirmDialog } from './ConfirmDialog'
+import { ConfirmDialog } from './ui/ConfirmDialog'
 import { PickupNoteField } from './PickupNoteField'
 
 export type RidePatch = {
