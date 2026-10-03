@@ -1184,15 +1184,3 @@ a.link-back {
   border-color: #f59e0b;
 }
 
-.menu-badge {
-  display: inline-block;
-  min-width: 1.4rem;
-  margin-left: 0.5rem;
-  padding: 0 0.4rem;
-  border-radius: 999px;
-  background: #f59e0b;
-  color: #111827;
-  font-size: 0.85rem;
-  font-weight: 700;
-  text-align: center;
-}

@@ -81,15 +81,7 @@
     "timePickerMinuteField": "Minute",
     "timePickerOpen": "Open time picker",
     "continue": "Continue",
-    "weekdayLetters": [
-      "M",
-      "T",
-      "W",
-      "T",
-      "F",
-      "S",
-      "S"
-    ],
+    "weekdayLetters": ["M", "T", "W", "T", "F", "S", "S"],
     "missingAddresses": "Addresses missing.",
     "futureTime": "Choose a time in the future."
   },
@@ -176,7 +168,10 @@
     "reject": "Reject",
     "rejectConfirm": "Reject and delete this account?",
     "toastApproved": "Account approved",
-    "toastRejected": "Account rejected and removed"
+    "toastRejected": "Account rejected and removed",
+    "toastActionFailed": "Something went wrong. Please try again.",
+    "signInPassword": "Password",
+    "signInGoogle": "Google"
   },
   "pwa": {
     "installTitle": "Add Farfartaxi to your home screen",

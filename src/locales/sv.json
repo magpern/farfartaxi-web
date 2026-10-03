@@ -81,15 +81,7 @@
     "timePickerMinuteField": "Minut",
     "timePickerOpen": "Öppna tidsväljare",
     "continue": "Fortsätt",
-    "weekdayLetters": [
-      "M",
-      "T",
-      "O",
-      "T",
-      "F",
-      "L",
-      "S"
-    ],
+    "weekdayLetters": ["M", "T", "O", "T", "F", "L", "S"],
     "missingAddresses": "Saknar adresser.",
     "futureTime": "Välj en tid i framtiden."
   },
@@ -176,7 +168,10 @@
     "reject": "Neka",
     "rejectConfirm": "Vill du neka och ta bort det här kontot?",
     "toastApproved": "Kontot är godkänt",
-    "toastRejected": "Kontot har nekats och tagits bort"
+    "toastRejected": "Kontot har nekats och tagits bort",
+    "toastActionFailed": "Något gick fel. Försök igen.",
+    "signInPassword": "Lösenord",
+    "signInGoogle": "Google"
   },
   "pwa": {
     "installTitle": "Lägg till Farfartaxi på hemskärmen",

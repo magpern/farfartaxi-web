@@ -2180,16 +2180,24 @@ function AdminPage({
   }
 
   async function approveUser(userId: number) {
-    await api(`/api/admin/users/${userId}/approve`, { method: 'POST', token })
-    onToast(t('admin.toastApproved'))
-    load()
+    try {
+      await api(`/api/admin/users/${userId}/approve`, { method: 'POST', token })
+      onToast(t('admin.toastApproved'))
+      load()
+    } catch {
+      onToast(t('admin.toastActionFailed'))
+    }
   }
 
   async function rejectUser(userId: number) {
     if (!window.confirm(t('admin.rejectConfirm'))) return
-    await api(`/api/admin/users/${userId}`, { method: 'DELETE', token })
-    onToast(t('admin.toastRejected'))
-    load()
+    try {
+      await api(`/api/admin/users/${userId}`, { method: 'DELETE', token })
+      onToast(t('admin.toastRejected'))
+      load()
+    } catch {
+      onToast(t('admin.toastActionFailed'))
+    }
   }
 
   const pendingUsers = users.filter((u) => u.approved === false)
@@ -2211,7 +2219,8 @@ function AdminPage({
             <article key={u.id} className="ride-item">
               <p>
                 <strong>{u.fullName}</strong> ({u.email}) — {u.role}
-                {u.createdAt && <span className="tiny"> {new Date(u.createdAt).toLocaleDateString()}</span>}
+                {u.createdAt && <span className="tiny"> {new Date(u.createdAt).toLocaleDateString()}</span>}{' '}
+                <span className="tiny">[{u.hasLocalPassword ? t('admin.signInPassword') : t('admin.signInGoogle')}]</span>
               </p>
               <div className="admin-pending-actions">
                 <button type="button" className="btn btn-primary" onClick={() => approveUser(u.id)}>
