@@ -125,7 +125,7 @@ function DrivingBody({
 
       {/* Hand-off to the maps app: the pickup until the passenger is in the car, then the destination. */}
       <div className="navigate-slot" data-slot="navigate">
-        {!finished && (ride.status === 'EN_ROUTE' || ride.status === 'ARRIVED' || ride.status === 'PICKED_UP') && (
+        {!finished && (ride.status === 'EN_ROUTE' || ride.status === 'PICKED_UP') && (
           <NavigateButton
             lat={toDestination ? ride.toLat : ride.fromLat}
             lon={toDestination ? ride.toLon : ride.fromLon}
@@ -134,7 +134,7 @@ function DrivingBody({
         )}
       </div>
 
-      {!finished && <ContactButtons phone={ride.passengerPhone} name={first} prefilledSms={t('messages.DRIVER_HERE')} callWithName />}
+      {!finished && <ContactButtons phone={ride.passengerPhone} name={first} prefilledSms={t('messages.DRIVER_HERE')} callWithName variant="secondary" noPhoneNote />}
 
       {hasAction(ride, 'MESSAGE') && (
         <QuickMessages codes={DRIVER_MESSAGE_CODES} large disabled={a.busy} onSend={(c) => void a.sendMessage(c)} />
@@ -142,7 +142,7 @@ function DrivingBody({
 
       {hasAction(ride, 'RETURN') && (
         <Button size="lg" block variant="ghost" disabled={a.busy} onClick={() => a.setReturning(true)}>
-          {t('driver.giveBack')}
+          {t('driver.giveBackRide')}
         </Button>
       )}
       {footer}

@@ -177,7 +177,9 @@
     "complete": "Done",
     "toastAccepted": "You accepted the trip.",
     "toastRefused": "Trip declined.",
-    "toastStartDriving": "Driving mode enabled.",
+    "toastStartDriving": "Driving to {{name}}",
+    "toastArrived": "Good! Tell us when you have picked up {{name}}",
+    "toastPickedUp": "Heading to {{destination}}",
     "toastComplete": "Trip completed.",
     "refuseComment": "Unavailable right now",
     "pushNotSupported": "Push is not supported in this browser.",
@@ -397,7 +399,8 @@
     "sms": "SMS",
     "callAria": "Call {{name}}",
     "smsAria": "Text {{name}}",
-    "callName": "Call {{name}}"
+    "callName": "Call {{name}}",
+    "noPhone": "No phone number saved"
   },
   "lastUpdated": {
     "stale": "Couldn't reach the server – showing the last known information."

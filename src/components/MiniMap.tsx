@@ -31,5 +31,10 @@ export function MiniMap({ fromLat, fromLon, toLat, toLon, label }: { fromLat: nu
       map.remove()
     }
   }, [fromLat, fromLon, toLat, toLon])
-  return <div ref={node} className="mini-map" data-testid="mini-map" role="img" aria-label={label} />
+  return (
+    <>
+      <div ref={node} className="mini-map" data-testid="mini-map" role="img" aria-label={label} />
+      <p className="mini-map-credit">© OpenStreetMap</p>
+    </>
+  )
 }

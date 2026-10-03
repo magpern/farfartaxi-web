@@ -3,6 +3,7 @@ import { api, ApiError } from '../api/client'
 import { useI18n } from '../i18n/context'
 import { apiErrorMessage, isApiCode } from '../lib/apiErrors'
 import type { RideResponse } from '../lib/rideTypes'
+import { shortPlaceName } from '../lib/navigation'
 import { formatHm } from '../lib/time'
 import { useBusy } from '../lib/useBusy'
 import type { RidePatch } from './RideTimeEdit'
@@ -138,7 +139,9 @@ export function useDriverRideActions({ ride, token, onToast, onChanged }: Common
   const simple = (path: string, toastKey?: string) =>
     act(async () => {
       await post(path)
-      if (toastKey) onToast(t(toastKey))
+      if (toastKey) {
+        onToast(t(toastKey, { name: ride.passengerName?.split(' ')[0] || t('driver.passengerFallback'), destination: shortPlaceName(ride.toAddress) }))
+      }
     })
 
   const decline = () =>
@@ -183,7 +186,7 @@ export function useDriverRideActions({ ride, token, onToast, onChanged }: Common
 export const DRIVER_STEPS: Array<{ action: import('../lib/rideTypes').RideAction; path: string; labelKey: string; toastKey?: string }> = [
   { action: 'ACCEPT', path: 'accept', labelKey: 'driver.takeRide', toastKey: 'driver.toastAccepted' },
   { action: 'START', path: 'start', labelKey: 'driver.driveNow', toastKey: 'driver.toastStartDriving' },
-  { action: 'ARRIVE', path: 'arrive', labelKey: 'driver.arrived' },
-  { action: 'PICKUP', path: 'pickup', labelKey: 'driver.pickedUp' },
+  { action: 'ARRIVE', path: 'arrive', labelKey: 'driver.arrived', toastKey: 'driver.toastArrived' },
+  { action: 'PICKUP', path: 'pickup', labelKey: 'driver.pickedUp', toastKey: 'driver.toastPickedUp' },
   { action: 'COMPLETE', path: 'complete', labelKey: 'driver.complete', toastKey: 'driver.toastComplete' }
 ]

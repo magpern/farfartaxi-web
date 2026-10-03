@@ -9,7 +9,9 @@ export function ContactButtons({
   name,
   size = 'lg',
   prefilledSms,
-  callWithName
+  callWithName,
+  noPhoneNote,
+  variant = 'primary'
 }: {
   phone: string | null | undefined
   name: string
@@ -17,16 +19,20 @@ export function ContactButtons({
   prefilledSms?: string
   /** Label the call button "Ring <name>" (driver screens). */
   callWithName?: boolean
+  /** Driver screens use 'secondary' so the step button stays the one obvious action. */
+  variant?: 'primary' | 'secondary'
+  /** Show a muted note instead of nothing when there is no phone (driver screens). */
+  noPhoneNote?: boolean
 }) {
   const { t } = useI18n()
-  if (!phone) return null
+  if (!phone) return noPhoneNote ? <p className="muted contact-missing">{t('contact.noPhone')}</p> : null
   const sms = prefilledSms ? smsHrefWithBody(phone, prefilledSms) : smsHref(phone)
   return (
     <div className="contact-buttons">
-      <Button variant="primary" size={size} href={telHref(phone)} aria-label={t('contact.callAria', { name })}>
+      <Button variant={variant} size={size} href={telHref(phone)} aria-label={t('contact.callAria', { name })}>
         {callWithName ? t('contact.callName', { name }) : t('contact.call')}
       </Button>
-      <Button size={size} href={sms} aria-label={t('contact.smsAria', { name })}>
+      <Button variant={variant === 'primary' ? undefined : variant} size={size} href={sms} aria-label={t('contact.smsAria', { name })}>
         {t('contact.sms')}
       </Button>
     </div>

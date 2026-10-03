@@ -66,4 +66,12 @@ describe('ContactButtons', () => {
     const { container } = wrap(<ContactButtons phone={null} name="Lisa" />)
     expect(container).toBeEmptyDOMElement()
   })
+  it('supports a secondary variant and a muted no-phone note on driver screens', () => {
+    vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue(ANDROID)
+    const { unmount } = wrap(<ContactButtons phone="0701234567" name="Lisa" callWithName variant="secondary" />)
+    expect(screen.getByRole('link', { name: 'Ring Lisa' })).toHaveClass('ui-btn-secondary')
+    unmount()
+    wrap(<ContactButtons phone={null} name="Lisa" noPhoneNote />)
+    expect(screen.getByText('Inget telefonnummer sparat')).toBeInTheDocument()
+  })
 })

@@ -177,7 +177,9 @@
     "complete": "Klar",
     "toastAccepted": "Du accepterade resan.",
     "toastRefused": "Resa nekad.",
-    "toastStartDriving": "Start körning aktiverad.",
+    "toastStartDriving": "Nu kör du till {{name}}",
+    "toastArrived": "Bra! Säg till när du hämtat upp {{name}}",
+    "toastPickedUp": "På väg till {{destination}}",
     "toastComplete": "Resan är klar.",
     "refuseComment": "Kan ej just nu",
     "pushNotSupported": "Push stöds inte i den här webbläsaren.",
@@ -397,7 +399,8 @@
     "sms": "SMS",
     "callAria": "Ring {{name}}",
     "smsAria": "Skicka SMS till {{name}}",
-    "callName": "Ring {{name}}"
+    "callName": "Ring {{name}}",
+    "noPhone": "Inget telefonnummer sparat"
   },
   "lastUpdated": {
     "stale": "Kunde inte nå servern – visar senast kända uppgifter."
