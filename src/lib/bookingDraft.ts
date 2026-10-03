@@ -7,6 +7,8 @@ export type BookingDraft = {
   toLon: number
   /** When set, a driver books the ride for this registered passenger. */
   passengerUserId?: number
+  /** Optional "Meddelande till föraren" (max 280 chars). */
+  pickupNote?: string
 }
 
 export const defaultDraft: BookingDraft = {
@@ -44,6 +46,7 @@ export function readBookingDraftFromStorage(): BookingDraft | null {
       const pid = Number(o.passengerUserId)
       if (Number.isFinite(pid)) out.passengerUserId = pid
     }
+    if (typeof o.pickupNote === 'string') out.pickupNote = o.pickupNote.slice(0, 280)
     return out
   } catch {
     return null
@@ -58,19 +61,26 @@ export function writeBookingDraftToStorage(d: BookingDraft) {
   }
 }
 
-export function buildRideBookPayload(draft: BookingDraft, scheduledAtIso: string): Record<string, unknown> {
+/** NOW rides omit scheduledAt (the server uses its own clock); SCHEDULED rides require it. */
+export function buildRideBookPayload(
+  draft: BookingDraft,
+  kind: 'NOW' | 'SCHEDULED',
+  scheduledAtIso?: string
+): Record<string, unknown> {
   const body: Record<string, unknown> = {
+    kind,
     fromAddress: draft.fromAddress,
     fromLat: draft.fromLat,
     fromLon: draft.fromLon,
     toAddress: draft.toAddress,
     toLat: draft.toLat,
-    toLon: draft.toLon,
-    scheduledAt: scheduledAtIso
+    toLon: draft.toLon
   }
+  if (kind === 'SCHEDULED' && scheduledAtIso) body.scheduledAt = scheduledAtIso
   if (typeof draft.passengerUserId === 'number' && Number.isFinite(draft.passengerUserId)) {
     body.passengerUserId = draft.passengerUserId
   }
+  const note = draft.pickupNote?.trim()
+  if (note) body.pickupNote = note.slice(0, 280)
   return body
 }
-

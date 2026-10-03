@@ -9,8 +9,9 @@ import {
 
 describe('buildRideBookPayload', () => {
   it('maps the draft and scheduledAt, omitting passengerUserId when unset', () => {
-    const body = buildRideBookPayload(defaultDraft, '2026-01-01T10:00:00Z')
+    const body = buildRideBookPayload(defaultDraft, 'SCHEDULED', '2026-01-01T10:00:00Z')
     expect(body).toEqual({
+      kind: 'SCHEDULED',
       fromAddress: '',
       fromLat: defaultDraft.fromLat,
       fromLon: defaultDraft.fromLon,
@@ -21,8 +22,15 @@ describe('buildRideBookPayload', () => {
     })
   })
   it('includes a finite numeric passengerUserId', () => {
-    expect(buildRideBookPayload({ ...defaultDraft, passengerUserId: 7 }, 'x').passengerUserId).toBe(7)
-    expect(buildRideBookPayload({ ...defaultDraft, passengerUserId: NaN }, 'x')).not.toHaveProperty('passengerUserId')
+    expect(buildRideBookPayload({ ...defaultDraft, passengerUserId: 7 }, 'NOW', 'x').passengerUserId).toBe(7)
+    expect(buildRideBookPayload({ ...defaultDraft, passengerUserId: NaN }, 'NOW', 'x')).not.toHaveProperty('passengerUserId')
+  })
+  it('sends kind and a trimmed pickupNote only when present', () => {
+    expect(buildRideBookPayload(defaultDraft, 'NOW').kind).toBe('NOW')
+    expect(buildRideBookPayload(defaultDraft, 'NOW', 'x')).not.toHaveProperty('scheduledAt')
+    expect(buildRideBookPayload(defaultDraft, 'NOW', 'x')).not.toHaveProperty('pickupNote')
+    expect(buildRideBookPayload({ ...defaultDraft, pickupNote: '  Blå dörr ' }, 'NOW', 'x').pickupNote).toBe('Blå dörr')
+    expect(buildRideBookPayload({ ...defaultDraft, pickupNote: ' ' }, 'NOW', 'x')).not.toHaveProperty('pickupNote')
   })
 })
 
@@ -36,6 +44,11 @@ describe('booking draft storage', () => {
     const d = { ...defaultDraft, fromAddress: 'A', toAddress: 'B', passengerUserId: 3 }
     writeBookingDraftToStorage(d)
     expect(readBookingDraftFromStorage()).toEqual(d)
+  })
+  it('round-trips the pickup note', () => {
+    const d = { ...defaultDraft, fromAddress: 'A', toAddress: 'B', pickupNote: 'Vid grinden' }
+    writeBookingDraftToStorage(d)
+    expect(readBookingDraftFromStorage()?.pickupNote).toBe('Vid grinden')
   })
   it('rejects invalid JSON and invalid shapes', () => {
     sessionStorage.setItem(BOOKING_DRAFT_STORAGE_KEY, '{nope')

@@ -3,7 +3,11 @@
     "brand": "Farfartaxi",
     "ok": "OK",
     "signingIn": "Signing in…",
-    "documentTitle": "Farfartaxi"
+    "documentTitle": "Farfartaxi",
+    "cancel": "Cancel",
+    "close": "Close",
+    "working": "Wait…",
+    "call": "Call"
   },
   "landing": {
     "subtitle": "Book the family’s safest taxi. Simple, fast, and mobile-friendly.",
@@ -64,7 +68,10 @@
     "behalfLoading": "Loading users…",
     "behalfCancel": "Cancel",
     "behalfContinue": "Continue",
-    "forPassenger": "Passenger"
+    "forPassenger": "Passenger",
+    "ambiguousTime": "{{time}} happens twice that night. We use the first one.",
+    "nonexistentTime": "{{time}} does not exist that day (daylight saving starts). Pick another time.",
+    "submitting": "Booking…"
   },
   "prebook": {
     "back": "Back",
@@ -82,7 +89,15 @@
     "timePickerMinuteField": "Minute",
     "timePickerOpen": "Open time picker",
     "continue": "Continue",
-    "weekdayLetters": ["M", "T", "W", "T", "F", "S", "S"],
+    "weekdayLetters": [
+      "M",
+      "T",
+      "W",
+      "T",
+      "F",
+      "S",
+      "S"
+    ],
     "missingAddresses": "Addresses missing.",
     "futureTime": "Choose a time in the future."
   },
@@ -112,7 +127,32 @@
     "shareCopiedToast": "Share link copied.",
     "feedbackThanksToast": "Thanks for your feedback!",
     "cancelReason": "User cancelled",
-    "feedbackComment": "Best grandpa!"
+    "feedbackComment": "Best grandpa!",
+    "waiting": "We are asking the drivers right now.",
+    "noDriverHint": "No driver has said yes yet. Keep waiting, change the time or call grandpa.",
+    "keepWaiting": "Keep waiting",
+    "keepWaitingToast": "We keep asking the drivers.",
+    "editTime": "Change ride",
+    "editTitle": "Change ride",
+    "editSave": "Save changes",
+    "editDate": "Date",
+    "editSavedToast": "Time changed.",
+    "editMaterial": "You changed the ride. The driver needs to confirm the change.",
+    "futureTime": "Pick a time in the future.",
+    "cancelConfirmTitle": "Cancel the ride?",
+    "cancelConfirmBody": "The driver is already on the way. Do you really want to cancel?",
+    "cancelConfirmYes": "Yes, cancel",
+    "cancelConfirmNo": "Keep the ride",
+    "driver": "Driver: {{name}}",
+    "vehicle": "Car: {{note}}",
+    "callDriver": "Call the driver",
+    "kindNow": "Ride now",
+    "kindScheduled": "Pre-booked",
+    "editDestination": "Destination",
+    "editSearchPlaceholder": "Search a new address",
+    "editSearchLabel": "Search address",
+    "editClearDestination": "Keep current",
+    "editNothingChanged": "Change something to save."
   },
   "driver": {
     "panel": "Driver panel",
@@ -137,7 +177,36 @@
     "pushNotSupported": "Push is not supported in this browser.",
     "pushDenied": "Push permission denied.",
     "pushMissingKey": "VAPID public key missing in backend configuration.",
-    "pushEnabled": "Push enabled."
+    "pushEnabled": "Push enabled.",
+    "takeRide": "Take the ride",
+    "cannot": "Can't",
+    "giveBack": "Hand back",
+    "driveNow": "Drive now",
+    "arrived": "I've arrived",
+    "pickedUp": "Picked up",
+    "urgent": "Urgent",
+    "passenger": "Passenger: {{name}}",
+    "callPassenger": "Call the passenger",
+    "proximityTitle": "Ride close in time",
+    "proximityBody": "You already have a ride at {{time}} — take it anyway?",
+    "proximityBodyNoTime": "You already have a ride close in time — take it anyway?",
+    "proximityYes": "Take it anyway",
+    "returnTitle": "Hand the ride back?",
+    "returnReasonOptional": "Short reason (optional)",
+    "returnReasonRequired": "Short reason (required once you are on the way)",
+    "returnYes": "Hand back",
+    "toastReturned": "The ride is back in the queue.",
+    "availabilityTitle": "Availability",
+    "availableNow": "Available now",
+    "awayTitle": "Away (optional)",
+    "awayFrom": "From",
+    "awayUntil": "Until",
+    "awaySave": "Save",
+    "awayClear": "Clear",
+    "availabilitySaved": "Availability saved.",
+    "awayInvalid": "The end date cannot be before the start date.",
+    "passengerFallback": "Passenger",
+    "changedRide": "{{name}} changed the ride — confirm"
   },
   "admin": {
     "logoutEverywhere": "Log out everywhere",
@@ -201,10 +270,11 @@
     "footer": "Farfartaxi is family-friendly, fast, and fun to use."
   },
   "errors": {
-    "generic": "Something went wrong",
+    "generic": "Something went wrong. Try again.",
     "sessionExpired": "Your session has expired. Please log in again.",
     "bookingFuture": "Choose a date and time in the future.",
-    "bookingFailed": "Could not book: {{message}}"
+    "bookingFailed": "Could not book: {{message}}",
+    "offline": "No connection"
   },
   "languages": {
     "sv": "Svenska",
@@ -216,5 +286,55 @@
     "recheck": "Check again",
     "logout": "Log out",
     "stillPending": "Not approved yet. Please try again a little later."
+  },
+  "rideStatus": {
+    "REQUESTED": "Waiting for a driver",
+    "ACCEPTED": "Driver ready",
+    "EN_ROUTE": "Your driver is on the way",
+    "ARRIVED": "Your driver has arrived",
+    "PICKED_UP": "On the way",
+    "COMPLETED": "Done",
+    "CANCELLED": "Cancelled",
+    "NO_DRIVER": "No driver has said yes yet",
+    "UNKNOWN": "Unknown status"
+  },
+  "rideStatusDriver": {
+    "REQUESTED": "Open ride",
+    "ACCEPTED": "You took the ride",
+    "EN_ROUTE": "You are on the way",
+    "ARRIVED": "You have arrived",
+    "PICKED_UP": "Passenger on board",
+    "COMPLETED": "Done",
+    "CANCELLED": "Cancelled",
+    "NO_DRIVER": "No driver"
+  },
+  "apiErrors": {
+    "RIDE_TAKEN": "Someone else took the ride",
+    "RIDE_CANCELLED": "The ride was cancelled",
+    "RIDE_CHANGED": "The ride has changed",
+    "OFFER_CLOSED": "This request is no longer open",
+    "EDIT_NOT_ALLOWED": "The ride can no longer be changed. Send a quick message or call.",
+    "ALL_DECLINED": "All drivers said no. Change the time to ask again.",
+    "INVALID_TRANSITION": "That is not possible right now",
+    "CONFIRM_REQUIRED": "Please confirm to continue",
+    "PROXIMITY_WARNING": "You already have a ride close in time"
+  },
+  "messages": {
+    "PASSENGER_OUTSIDE": "I'm outside",
+    "PASSENGER_TWO_MIN": "Coming in 2 min",
+    "PASSENGER_CALL_ME": "Call me",
+    "DRIVER_HERE": "I'm here",
+    "DRIVER_TWO_MIN": "There in 2 min",
+    "DRIVER_LATE": "Running a bit late",
+    "title": "Quick message",
+    "sentToast": "Message sent.",
+    "you": "You",
+    "driverName": "Grandpa"
+  },
+  "pickupNote": {
+    "label": "Message to the driver (optional)",
+    "placeholder": "E.g. blue door, use the intercom",
+    "count": "{{n}}/280",
+    "show": "Message: {{note}}"
   }
 }
