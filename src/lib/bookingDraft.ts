@@ -7,6 +7,8 @@ export type BookingDraft = {
   toLon: number
   /** When set, a driver books the ride for this registered passenger. */
   passengerUserId?: number
+  /** Optional "Meddelande till föraren" (max 280 chars). */
+  pickupNote?: string
 }
 
 export const defaultDraft: BookingDraft = {
@@ -44,6 +46,7 @@ export function readBookingDraftFromStorage(): BookingDraft | null {
       const pid = Number(o.passengerUserId)
       if (Number.isFinite(pid)) out.passengerUserId = pid
     }
+    if (typeof o.pickupNote === 'string') out.pickupNote = o.pickupNote.slice(0, 280)
     return out
   } catch {
     return null
@@ -58,8 +61,17 @@ export function writeBookingDraftToStorage(d: BookingDraft) {
   }
 }
 
-export function buildRideBookPayload(draft: BookingDraft, scheduledAtIso: string): Record<string, unknown> {
+/**
+ * NOW rides ignore scheduledAt on the server (it uses server time); we still send a near-future
+ * value so older backends that validate the field keep working.
+ */
+export function buildRideBookPayload(
+  draft: BookingDraft,
+  kind: 'NOW' | 'SCHEDULED',
+  scheduledAtIso: string
+): Record<string, unknown> {
   const body: Record<string, unknown> = {
+    kind,
     fromAddress: draft.fromAddress,
     fromLat: draft.fromLat,
     fromLon: draft.fromLon,
@@ -71,6 +83,7 @@ export function buildRideBookPayload(draft: BookingDraft, scheduledAtIso: string
   if (typeof draft.passengerUserId === 'number' && Number.isFinite(draft.passengerUserId)) {
     body.passengerUserId = draft.passengerUserId
   }
+  const note = draft.pickupNote?.trim()
+  if (note) body.pickupNote = note.slice(0, 280)
   return body
 }
-

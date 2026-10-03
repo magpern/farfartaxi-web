@@ -29,6 +29,13 @@ import {
   type BookingDraft
 } from './lib/bookingDraft'
 import { haversine } from './lib/geo'
+import type { RideResponse } from './lib/rideTypes'
+import { createIdempotencyHolder } from './lib/idempotency'
+import { formatYmdHm, stockholmLocalToInstant, stockholmParts } from './lib/time'
+import { useBusy } from './lib/useBusy'
+import { MyRidesPage } from './components/MyRidesPage'
+import { DriverPage } from './components/DriverPage'
+import { PickupNoteField } from './components/PickupNoteField'
 import { api, registerPendingApprovalHandler } from './api/client'
 import {
   API_URL,
@@ -83,25 +90,6 @@ type AuthResponse = {
   user: UserView
 }
 
-type RideResponse = {
-  id: number
-  status: string
-  fromAddress: string
-  fromLat: number
-  fromLon: number
-  toAddress: string
-  toLat: number
-  toLon: number
-  scheduledAt: string
-  passengerId: number
-  acceptedByDriverId: number | null
-  acceptedByDriverName: string | null
-  etaMinutes: number | null
-  lastDriverLat: number | null
-  lastDriverLon: number | null
-  lastLocationAt: string | null
-}
-
 type BookingUserOption = {
   id: number
   fullName: string
@@ -121,24 +109,6 @@ type OsrmRouteResponse = {
     duration: number
     geometry: { type: string; coordinates: number[][] }
   }>
-}
-
-function formatYmdHm(iso: string) {
-  const d = new Date(iso)
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
-}
-
-/** Lists and booking-related timestamps: always 24-hour clock. */
-function formatLocaleDateTime24h(iso: string, dateLocale: string) {
-  return new Date(iso).toLocaleString(dateLocale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
 }
 
 /** One-shot flag so /login can show session-expired copy after proactive logout. */
@@ -780,6 +750,8 @@ function BookingPage({
   const { draft, setDraft, clearBookingDraft } = useBookingDraft()
   const isDriver = currentUser.role === 'DRIVER'
   const [behalfAction, setBehalfAction] = useState<'forboka' | 'akaNu' | null>(null)
+  const { busy: booking, run: runBooking } = useBusy()
+  const idempotency = useRef(createIdempotencyHolder())
   const [modalPassengerId, setModalPassengerId] = useState('')
   const [bookingUsers, setBookingUsers] = useState<BookingUserOption[] | null>(null)
   const draftRef = useRef(draft)
@@ -1158,18 +1130,25 @@ function BookingPage({
   }
 
   async function submitAkaNu(d: BookingDraft) {
-    const scheduledAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
-    try {
-      const ride = await api<RideResponse>('/api/rides', {
-        method: 'POST',
-        token,
-        body: JSON.stringify(buildRideBookPayload(d, scheduledAt))
-      })
-      clearBookingDraft()
-      navigate('/app/bekraftelse', { state: { ride } })
-    } catch (err) {
-      onToast(bookingApiErrorMessage(err, t))
-    }
+    await runBooking(async () => {
+      const scheduledAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
+      const payload = buildRideBookPayload(d, 'NOW', scheduledAt)
+      // The payload changes every call (scheduledAt), so key on the stable part.
+      const key = idempotency.current.keyFor({ ...payload, scheduledAt: undefined })
+      try {
+        const ride = await api<RideResponse>('/api/rides', {
+          method: 'POST',
+          token,
+          headers: { 'Idempotency-Key': key },
+          body: JSON.stringify(payload)
+        })
+        idempotency.current.reset()
+        clearBookingDraft()
+        navigate('/app/bekraftelse', { state: { ride } })
+      } catch (err) {
+        onToast(bookingApiErrorMessage(err, t))
+      }
+    })
   }
 
   function confirmBehalfModal() {
@@ -1304,12 +1283,16 @@ function BookingPage({
             : t('booking.distanceKm', { km: distanceKm.toFixed(2) })}
         </p>
         {roadRoute && <p className="dist-hint dist-hint-sub">{t('booking.routingAttribution')}</p>}
+        <PickupNoteField
+          value={draft.pickupNote ?? ''}
+          onChange={(v) => setDraft((d) => ({ ...d, pickupNote: v }))}
+        />
         <div className="booking-actions">
-          <button type="button" className="btn btn-outline" onClick={goForboka}>
+          <button type="button" className="btn btn-outline" onClick={goForboka} disabled={booking}>
             {t('booking.forboka')}
           </button>
-          <button type="button" className="btn btn-aka-nu" onClick={bookAkaNu}>
-            {t('booking.akaNu')}
+          <button type="button" className="btn btn-aka-nu" onClick={bookAkaNu} disabled={booking} aria-busy={booking}>
+            {booking ? t('booking.submitting') : t('booking.akaNu')}
           </button>
         </div>
       </div>
@@ -1377,7 +1360,7 @@ function PreBookPage({
 }) {
   const { t, locale, ta } = useI18n()
   const navigate = useNavigate()
-  const { draft, clearBookingDraft } = useBookingDraft()
+  const { draft, setDraft, clearBookingDraft } = useBookingDraft()
   const isDriver = currentUser.role === 'DRIVER'
   const [behalfPassengerLabel, setBehalfPassengerLabel] = useState<string | null>(null)
 
@@ -1403,21 +1386,18 @@ function PreBookPage({
     }
   }, [isDriver, draft.passengerUserId, token])
 
-  const [cursor, setCursor] = useState(() => {
-    const d = new Date(Date.now() + 60 * 60 * 1000)
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate())
-  })
-  const [pickHour, setPickHour] = useState(() => {
-    const d = new Date(Date.now() + 60 * 60 * 1000)
-    return d.getHours()
-  })
-  const [pickMinute, setPickMinute] = useState(() => {
-    const d = new Date(Date.now() + 60 * 60 * 1000)
-    return d.getMinutes()
-  })
+  // Default to one hour from now, as Stockholm wall-clock time (the booking time zone).
+  const [initialParts] = useState(() => stockholmParts(new Date(Date.now() + 60 * 60 * 1000)))
+  const [cursor, setCursor] = useState(
+    () => new Date(initialParts.year, initialParts.month - 1, initialParts.day)
+  )
+  const [pickHour, setPickHour] = useState(initialParts.hour)
+  const [pickMinute, setPickMinute] = useState(initialParts.minute)
+  const { busy: booking, run: runBooking } = useBusy()
   const [timePickerOpen, setTimePickerOpen] = useState(false)
 
   const selectedDay = useMemo(() => cursor.getDate(), [cursor])
+  const idempotency = useRef(createIdempotencyHolder())
 
   const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
   const monthLabel = cursor.toLocaleDateString(dateLocale, { month: 'long', year: 'numeric' })
@@ -1444,28 +1424,42 @@ function PreBookPage({
     setCursor(new Date(year, month, day))
   }
 
+  const resolvedTime = useMemo(
+    () => stockholmLocalToInstant(year, month + 1, selectedDay, pickHour, pickMinute),
+    [year, month, selectedDay, pickHour, pickMinute]
+  )
+  const pickTimeText = `${String(pickHour).padStart(2, '0')}:${String(pickMinute).padStart(2, '0')}`
+
   async function onFortsatt() {
     if (!draft.fromAddress.trim() || !draft.toAddress.trim()) {
       onToast(t('prebook.missingAddresses'))
       navigate('/app')
       return
     }
-    const when = new Date(year, month, selectedDay, pickHour, pickMinute, 0, 0)
-    if (when.getTime() <= Date.now()) {
+    if (!resolvedTime.ok) {
+      onToast(t('booking.nonexistentTime', { time: pickTimeText }))
+      return
+    }
+    if (new Date(resolvedTime.iso).getTime() <= Date.now()) {
       onToast(t('prebook.futureTime'))
       return
     }
-    try {
-      const ride = await api<RideResponse>('/api/rides', {
-        method: 'POST',
-        token,
-        body: JSON.stringify(buildRideBookPayload(draft, when.toISOString()))
-      })
-      clearBookingDraft()
-      navigate('/app/bekraftelse', { state: { ride } })
-    } catch (err) {
-      onToast(bookingApiErrorMessage(err, t))
-    }
+    await runBooking(async () => {
+      const payload = buildRideBookPayload(draft, 'SCHEDULED', resolvedTime.iso)
+      try {
+        const ride = await api<RideResponse>('/api/rides', {
+          method: 'POST',
+          token,
+          headers: { 'Idempotency-Key': idempotency.current.keyFor(payload) },
+          body: JSON.stringify(payload)
+        })
+        idempotency.current.reset()
+        clearBookingDraft()
+        navigate('/app/bekraftelse', { state: { ride } })
+      } catch (err) {
+        onToast(bookingApiErrorMessage(err, t))
+      }
+    })
   }
 
   const sweDays = ta('prebook.weekdayLetters')
@@ -1549,8 +1543,22 @@ function PreBookPage({
         keyboardHourLabel={t('prebook.timePickerHourField')}
         keyboardMinuteLabel={t('prebook.timePickerMinuteField')}
       />
-      <button type="button" className="btn btn-fortsatt" onClick={onFortsatt}>
-        {t('prebook.continue')}
+      {!resolvedTime.ok && <p className="form-error">{t('booking.nonexistentTime', { time: pickTimeText })}</p>}
+      {resolvedTime.ok && resolvedTime.ambiguous && (
+        <p className="tiny">{t('booking.ambiguousTime', { time: pickTimeText })}</p>
+      )}
+      <PickupNoteField
+        value={draft.pickupNote ?? ''}
+        onChange={(v) => setDraft((d) => ({ ...d, pickupNote: v }))}
+      />
+      <button
+        type="button"
+        className="btn btn-fortsatt"
+        onClick={onFortsatt}
+        disabled={booking || !resolvedTime.ok}
+        aria-busy={booking}
+      >
+        {booking ? t('booking.submitting') : t('prebook.continue')}
       </button>
     </div>
   )
@@ -1588,335 +1596,6 @@ function BookingConfirmPage() {
       <button type="button" className="btn btn-primary" onClick={() => navigate('/app')}>
         {t('common.ok')}
       </button>
-    </div>
-  )
-}
-
-function MyRidesPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
-  const { t, locale } = useI18n()
-  const [upcoming, setUpcoming] = useState<RideResponse[]>([])
-  const [history, setHistory] = useState<RideResponse[]>([])
-  const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
-
-  async function load() {
-    const up = await api<RideResponse[]>('/api/rides/my?history=false', { token })
-    const hist = await api<RideResponse[]>('/api/rides/my?history=true', { token })
-    setUpcoming(up)
-    setHistory(hist)
-  }
-
-  useEffect(() => {
-    load()
-    const id = window.setInterval(load, 15000)
-    return () => window.clearInterval(id)
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- legacy: intentionally runs on mount only; load() is recreated each render (pre-existing)
-  }, [])
-
-  async function cancel(rideId: number, status: string) {
-    const reason =
-      status === 'PENDING_OPEN' ? t('rides.cancelReason') : t('rides.cancelReasonAfterAccept')
-    try {
-      await api(`/api/rides/${rideId}/cancel`, {
-        method: 'POST',
-        token,
-        body: JSON.stringify({ reason })
-      })
-      onToast(t('rides.cancelledToast'))
-    } catch (err) {
-      onToast(getErrorMessage(err) || t('errors.generic'))
-    } finally {
-      await load()
-    }
-  }
-
-  async function share(rideId: number) {
-    const res = await api<{ url: string }>(`/api/rides/${rideId}/share`, { method: 'POST', token })
-    await navigator.clipboard.writeText(res.url)
-    onToast(t('rides.shareCopiedToast'))
-  }
-
-  async function feedback(rideId: number) {
-    await api(`/api/rides/${rideId}/feedback`, {
-      method: 'POST',
-      token,
-      body: JSON.stringify({ stars: 5, comment: t('rides.feedbackComment') })
-    })
-    onToast(t('rides.feedbackThanksToast'))
-  }
-
-  async function deleteRide(rideId: number) {
-    await api(`/api/rides/${rideId}`, { method: 'DELETE', token })
-    onToast(t('rides.deletedToast'))
-    load()
-  }
-
-  const canDeleteFromList = (ride: RideResponse) =>
-    ride.status === 'CANCELLED' || ride.status === 'REJECTED'
-
-  const canPassengerCancel = (ride: RideResponse) =>
-    ride.status === 'PENDING_OPEN' ||
-    ride.status === 'ACCEPTED' ||
-    ride.status === 'IN_PROGRESS'
-
-  const canShareLiveTrip = (ride: RideResponse) =>
-    ride.status === 'PENDING_OPEN' ||
-    ride.status === 'ACCEPTED' ||
-    ride.status === 'IN_PROGRESS'
-
-  return (
-    <div className="subpage-wrap stack">
-      <Link className="link-back" to="/app">
-        {t('rides.backToBooking')}
-      </Link>
-      <div className="card">
-        <h3>{t('rides.upcoming')}</h3>
-        <p className="rides-share-hint">{t('rides.shareTripHint')}</p>
-        {upcoming.length === 0 && <p>{t('rides.noUpcoming')}</p>}
-        {upcoming.map((ride) => (
-          <article key={ride.id} className="ride-item">
-            <p>
-              <strong>{ride.fromAddress}</strong> {t('rides.toWord')} <strong>{ride.toAddress}</strong>
-            </p>
-            <p>
-              {formatLocaleDateTime24h(ride.scheduledAt, dateLocale)} - {ride.status}
-            </p>
-            {ride.etaMinutes && <p>{t('rides.eta', { min: ride.etaMinutes })}</p>}
-            <div className="row">
-              {canPassengerCancel(ride) && (
-                <button type="button" onClick={() => cancel(ride.id, ride.status)} className="btn btn-danger">
-                  {t('rides.cancel')}
-                </button>
-              )}
-              {canDeleteFromList(ride) && (
-                <button type="button" onClick={() => deleteRide(ride.id)} className="btn btn-danger">
-                  {t('rides.delete')}
-                </button>
-              )}
-              {canShareLiveTrip(ride) && (
-                <button type="button" title={t('rides.shareTripHint')} onClick={() => share(ride.id)} className="btn">
-                  {t('rides.shareTrip')}
-                </button>
-              )}
-            </div>
-          </article>
-        ))}
-      </div>
-      <div className="card">
-        <h3>{t('rides.history')}</h3>
-        {history.length === 0 && <p>{t('rides.noHistory')}</p>}
-        {history.map((ride) => (
-          <article key={ride.id} className="ride-item">
-            <p>
-              {ride.fromAddress} {t('rides.toWord')} {ride.toAddress}
-            </p>
-            <p>
-              {formatLocaleDateTime24h(ride.scheduledAt, dateLocale)} - {ride.status}
-            </p>
-            <div className="row">
-              {ride.status === 'COMPLETED' && (
-                <button type="button" className="btn" onClick={() => feedback(ride.id)}>
-                  {t('rides.thanksStars')}
-                </button>
-              )}
-              {canDeleteFromList(ride) && (
-                <button type="button" onClick={() => deleteRide(ride.id)} className="btn btn-danger">
-                  {t('rides.delete')}
-                </button>
-              )}
-            </div>
-          </article>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function DriverPage({ token, onToast }: { token: string; onToast: (m: string) => void }) {
-  const { t, locale } = useI18n()
-  const [myRides, setMyRides] = useState<RideResponse[]>([])
-  const [openRides, setOpenRides] = useState<RideResponse[]>([])
-  const [stats, setStats] = useState<{ completedRides: number; acceptedRides: number } | null>(null)
-  const watchId = useRef<number | null>(null)
-  const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
-
-  async function load() {
-    const [mine, rides, statsRes] = await Promise.all([
-      api<RideResponse[]>('/api/driver/rides/mine', { token }),
-      api<RideResponse[]>('/api/driver/rides/open', { token }),
-      api<{ completedRides: number; acceptedRides: number }>('/api/driver/stats', { token })
-    ])
-    setMyRides(mine)
-    setOpenRides(rides)
-    setStats(statsRes)
-  }
-
-  useEffect(() => {
-    load()
-    const id = window.setInterval(load, 10000)
-    return () => {
-      window.clearInterval(id)
-      if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- legacy: intentionally runs on mount only; load() is recreated each render (pre-existing)
-  }, [])
-
-  async function accept(rideId: number) {
-    await api(`/api/driver/rides/${rideId}/accept`, { method: 'POST', token })
-    onToast(t('driver.toastAccepted'))
-    load()
-  }
-
-  async function refuse(rideId: number) {
-    await api(`/api/driver/rides/${rideId}/refuse`, {
-      method: 'POST',
-      token,
-      body: JSON.stringify({ comment: t('driver.refuseComment') })
-    })
-    onToast(t('driver.toastRefused'))
-    load()
-  }
-
-  async function unaccept(rideId: number) {
-    await api(`/api/driver/rides/${rideId}/unaccept`, { method: 'POST', token })
-    onToast(t('driver.toastUnaccept'))
-    load()
-  }
-
-  async function startDriving(rideId: number) {
-    await api(`/api/driver/rides/${rideId}/start`, { method: 'POST', token })
-    onToast(t('driver.toastStartDriving'))
-    if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current)
-    watchId.current = navigator.geolocation.watchPosition(async (pos) => {
-      await api(`/api/driver/rides/${rideId}/location`, {
-        method: 'POST',
-        token,
-        body: JSON.stringify({
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
-          accuracy: pos.coords.accuracy
-        })
-      })
-    })
-    load()
-  }
-
-  async function complete(rideId: number) {
-    await api(`/api/driver/rides/${rideId}/complete`, { method: 'POST', token })
-    if (watchId.current !== null) {
-      navigator.geolocation.clearWatch(watchId.current)
-      watchId.current = null
-    }
-    onToast(t('driver.toastComplete'))
-    load()
-  }
-
-  async function setupPush() {
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-      onToast(t('driver.pushNotSupported'))
-      return
-    }
-    const permission = await Notification.requestPermission()
-    if (permission !== 'granted') {
-      onToast(t('driver.pushDenied'))
-      return
-    }
-    const registration = await navigator.serviceWorker.ready
-    const existing = await registration.pushManager.getSubscription()
-    const { publicKey } = await api<{ publicKey: string }>('/api/public/push-config')
-    if (!publicKey) {
-      onToast(t('driver.pushMissingKey'))
-      return
-    }
-    const sub = existing ?? await registration.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(publicKey)
-    })
-    const json = sub.toJSON()
-    await api('/api/push/subscriptions', {
-      method: 'POST',
-      token,
-      body: JSON.stringify({
-        endpoint: json.endpoint,
-        p256dh: json.keys?.p256dh,
-        auth: json.keys?.auth,
-        userAgent: navigator.userAgent
-      })
-    })
-    onToast(t('driver.pushEnabled'))
-  }
-
-  return (
-    <div className="subpage-wrap stack">
-      <div className="card">
-        <h3>{t('driver.panel')}</h3>
-        <div className="row">
-          <button className="btn" onClick={load}>
-            {t('driver.refresh')}
-          </button>
-          <button className="btn" onClick={setupPush}>
-            {t('driver.enablePush')}
-          </button>
-        </div>
-        {stats && (
-          <p>
-            {t('driver.stats', { completed: stats.completedRides, accepted: stats.acceptedRides })}
-          </p>
-        )}
-      </div>
-      <div className="card">
-        <h3>{t('driver.myRides')}</h3>
-        {myRides.length === 0 && <p>{t('driver.noMyRides')}</p>}
-        {myRides.map((ride) => (
-          <article key={ride.id} className="ride-item">
-            <p>
-              <strong>{ride.fromAddress}</strong> {t('rides.toWord')} <strong>{ride.toAddress}</strong>
-            </p>
-            <p>
-              {formatLocaleDateTime24h(ride.scheduledAt, dateLocale)} — {ride.status}
-            </p>
-            {ride.etaMinutes != null && ride.etaMinutes > 0 && (
-              <p>{t('rides.eta', { min: ride.etaMinutes })}</p>
-            )}
-            <div className="row">
-              {ride.status === 'ACCEPTED' && (
-                <>
-                  <button type="button" className="btn btn-primary" onClick={() => startDriving(ride.id)}>
-                    {t('driver.startDriving')}
-                  </button>
-                  <button type="button" className="btn" onClick={() => unaccept(ride.id)}>
-                    {t('driver.unaccept')}
-                  </button>
-                </>
-              )}
-              {ride.status === 'IN_PROGRESS' && (
-                <button type="button" className="btn btn-primary" onClick={() => complete(ride.id)}>
-                  {t('driver.complete')}
-                </button>
-              )}
-            </div>
-          </article>
-        ))}
-      </div>
-      <div className="card">
-        <h3>{t('driver.openRides')}</h3>
-        {openRides.length === 0 && <p>{t('driver.noOpenRides')}</p>}
-        {openRides.map((ride) => (
-          <article key={ride.id} className="ride-item">
-            <p>
-              <strong>{ride.fromAddress}</strong> {t('rides.toWord')} <strong>{ride.toAddress}</strong>
-            </p>
-            <p>{formatLocaleDateTime24h(ride.scheduledAt, dateLocale)}</p>
-            <div className="row">
-              <button type="button" className="btn btn-primary" onClick={() => accept(ride.id)}>
-                {t('driver.accept')}
-              </button>
-              <button type="button" className="btn" onClick={() => refuse(ride.id)}>
-                {t('driver.refuse')}
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
     </div>
   )
 }
@@ -2216,17 +1895,6 @@ function useLocalAuth(): [AuthResponse | null, Dispatch<SetStateAction<AuthRespo
     })
   }, [])
   return [value, set]
-}
-
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
-  const rawData = atob(base64)
-  const outputArray = new Uint8Array(rawData.length)
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i)
-  }
-  return outputArray
 }
 
 function getErrorMessage(err: unknown) {

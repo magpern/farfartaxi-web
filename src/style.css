@@ -1184,3 +1184,90 @@ a.link-back {
   border-color: #f59e0b;
 }
 
+
+/* M1: touch targets and ride actions */
+.btn-touch {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+.btn-driver {
+  min-height: 56px;
+  min-width: 56px;
+  font-size: 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: #f8fafc;
+  border: 1px solid #475569;
+  background: #1e293b;
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+}
+.btn-driver.btn-primary {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+.btn-driver.btn-outline {
+  background: transparent;
+}
+.btn:disabled,
+.btn-driver:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.ride-actions {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.quick-messages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+.ride-urgent {
+  border-color: #f59e0b;
+  border-width: 2px;
+  background: rgba(245, 158, 11, 0.08);
+}
+.badge-urgent {
+  display: inline-block;
+  background: #f59e0b;
+  color: #111827;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+  margin: 0 0 0.4rem;
+}
+.notice {
+  background: rgba(37, 99, 235, 0.15);
+  border: 1px solid #2563eb;
+  border-radius: 10px;
+  padding: 0.5rem 0.7rem;
+}
+.form-error {
+  color: #f87171;
+  margin: 0.3rem 0;
+}
+.pickup-note-field {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.6rem 0;
+}
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-height: 56px;
+  font-size: 1.1rem;
+}
+.toggle-row input {
+  width: 28px;
+  height: 28px;
+}

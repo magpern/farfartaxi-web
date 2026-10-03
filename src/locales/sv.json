@@ -3,7 +3,11 @@
     "brand": "Farfartaxi",
     "ok": "OK",
     "signingIn": "Loggar in…",
-    "documentTitle": "Farfartaxi"
+    "documentTitle": "Farfartaxi",
+    "cancel": "Avbryt",
+    "close": "Stäng",
+    "working": "Vänta…",
+    "call": "Ring"
   },
   "landing": {
     "subtitle": "Boka familjens tryggaste taxi. Enkel, snabb och mobilanpassad.",
@@ -64,7 +68,10 @@
     "behalfLoading": "Hämtar användare…",
     "behalfCancel": "Avbryt",
     "behalfContinue": "Fortsätt",
-    "forPassenger": "Passagerare"
+    "forPassenger": "Passagerare",
+    "ambiguousTime": "Klockan {{time}} inträffar två gånger den här natten. Vi använder den första.",
+    "nonexistentTime": "Klockan {{time}} finns inte den här dagen (sommartid börjar). Välj en annan tid.",
+    "submitting": "Bokar…"
   },
   "prebook": {
     "back": "Tillbaka",
@@ -82,7 +89,15 @@
     "timePickerMinuteField": "Minut",
     "timePickerOpen": "Öppna tidsväljare",
     "continue": "Fortsätt",
-    "weekdayLetters": ["M", "T", "O", "T", "F", "L", "S"],
+    "weekdayLetters": [
+      "M",
+      "T",
+      "O",
+      "T",
+      "F",
+      "L",
+      "S"
+    ],
     "missingAddresses": "Saknar adresser.",
     "futureTime": "Välj en tid i framtiden."
   },
@@ -112,7 +127,27 @@
     "shareCopiedToast": "Delningslänk kopierad.",
     "feedbackThanksToast": "Tack för din feedback!",
     "cancelReason": "Användaren avbokade",
-    "feedbackComment": "Bästa farfar!"
+    "feedbackComment": "Bästa farfar!",
+    "waiting": "Vi frågar förarna just nu.",
+    "noDriverHint": "Vill du vänta lite till eller avboka?",
+    "keepWaiting": "Fortsätt vänta",
+    "keepWaitingToast": "Vi fortsätter fråga förarna.",
+    "editTime": "Ändra tid",
+    "editTitle": "Ändra tid",
+    "editSave": "Spara ny tid",
+    "editDate": "Datum",
+    "editSavedToast": "Tiden är ändrad.",
+    "editMaterial": "Föraren behöver bekräfta ändringen",
+    "futureTime": "Välj en tid i framtiden.",
+    "cancelConfirmTitle": "Avboka resan?",
+    "cancelConfirmBody": "Föraren är redan på väg. Vill du verkligen avboka?",
+    "cancelConfirmYes": "Ja, avboka",
+    "cancelConfirmNo": "Behåll resan",
+    "driver": "Förare: {{name}}",
+    "vehicle": "Bil: {{note}}",
+    "callDriver": "Ring föraren",
+    "kindNow": "Åk nu",
+    "kindScheduled": "Förbokad"
   },
   "driver": {
     "panel": "Förarpanel",
@@ -137,7 +172,34 @@
     "pushNotSupported": "Push stöds inte i den här webbläsaren.",
     "pushDenied": "Push tillstånd nekades.",
     "pushMissingKey": "VAPID-nyckel saknas i backend-konfigurationen.",
-    "pushEnabled": "Push aktiverad."
+    "pushEnabled": "Push aktiverad.",
+    "takeRide": "Ta resan",
+    "cannot": "Kan inte",
+    "giveBack": "Lämna tillbaka",
+    "driveNow": "Kör nu",
+    "arrived": "Jag är framme",
+    "pickedUp": "Hämtat upp",
+    "urgent": "Brådskande",
+    "passenger": "Passagerare: {{name}}",
+    "callPassenger": "Ring passageraren",
+    "proximityTitle": "Resa nära i tid",
+    "proximityBody": "Du har redan en resa {{time}} — ta ändå?",
+    "proximityBodyNoTime": "Du har redan en resa nära i tid — ta ändå?",
+    "proximityYes": "Ta ändå",
+    "returnTitle": "Lämna tillbaka resan?",
+    "returnReasonOptional": "Kort anledning (valfritt)",
+    "returnReasonRequired": "Kort anledning (krävs när du redan är på väg)",
+    "returnYes": "Lämna tillbaka",
+    "toastReturned": "Resan är tillbaka i kön.",
+    "availabilityTitle": "Tillgänglighet",
+    "availableNow": "Tillgänglig nu",
+    "awayTitle": "Bortrest (valfritt)",
+    "awayFrom": "Från",
+    "awayUntil": "Till",
+    "awaySave": "Spara",
+    "awayClear": "Rensa",
+    "availabilitySaved": "Tillgängligheten är sparad.",
+    "awayInvalid": "Slutdatum kan inte vara före startdatum."
   },
   "admin": {
     "logoutEverywhere": "Logga ut överallt",
@@ -216,5 +278,53 @@
     "recheck": "Kolla igen",
     "logout": "Logga ut",
     "stillPending": "Inte godkänt än. Försök igen lite senare."
+  },
+  "rideStatus": {
+    "REQUESTED": "Väntar på förare",
+    "ACCEPTED": "Förare klar",
+    "EN_ROUTE": "Farfar är på väg",
+    "ARRIVED": "Farfar är framme",
+    "PICKED_UP": "På väg",
+    "COMPLETED": "Klar",
+    "CANCELLED": "Avbokad",
+    "NO_DRIVER": "Ingen förare har tackat ja än",
+    "UNKNOWN": "Okänd status"
+  },
+  "rideStatusDriver": {
+    "REQUESTED": "Ledig resa",
+    "ACCEPTED": "Du har tagit resan",
+    "EN_ROUTE": "Du är på väg",
+    "ARRIVED": "Du är framme",
+    "PICKED_UP": "Passageraren är med",
+    "COMPLETED": "Klar",
+    "CANCELLED": "Avbokad",
+    "NO_DRIVER": "Ingen förare"
+  },
+  "apiErrors": {
+    "RIDE_TAKEN": "Någon annan tog resan",
+    "RIDE_CANCELLED": "Resan är avbokad",
+    "RIDE_CHANGED": "Resan har ändrats",
+    "OFFER_CLOSED": "Förfrågan är inte längre öppen",
+    "EDIT_NOT_ALLOWED": "Resan kan inte ändras nu. Skicka ett snabbmeddelande eller ring.",
+    "ALL_DECLINED": "Alla förare har sagt nej. Ändra tiden för att fråga igen.",
+    "INVALID_TRANSITION": "Det går inte att göra det just nu",
+    "CONFIRM_REQUIRED": "Bekräfta för att fortsätta",
+    "PROXIMITY_WARNING": "Du har redan en resa nära i tid"
+  },
+  "messages": {
+    "PASSENGER_OUTSIDE": "Jag står utanför",
+    "PASSENGER_TWO_MIN": "Kommer om 2 min",
+    "PASSENGER_CALL_ME": "Ring mig",
+    "DRIVER_HERE": "Jag är här",
+    "DRIVER_TWO_MIN": "Är där om 2 min",
+    "DRIVER_LATE": "Blir lite sen",
+    "title": "Snabbmeddelande",
+    "sentToast": "Meddelandet skickades."
+  },
+  "pickupNote": {
+    "label": "Meddelande till föraren (valfritt)",
+    "placeholder": "T.ex. blå dörr, ring på porttelefonen",
+    "count": "{{n}}/280",
+    "show": "Meddelande: {{note}}"
   }
 }
