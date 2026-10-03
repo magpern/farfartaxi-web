@@ -19,6 +19,15 @@ const pin = (cls: string, text: string) =>
   L.divIcon({ className: `mini-pin ${cls}`, html: `<span>${text}</span>`, iconSize: [28, 28], iconAnchor: [14, 14] })
 const carIcon = L.divIcon({ className: 'live-car', html: '<span>🚗</span>', iconSize: [36, 36], iconAnchor: [18, 18] })
 
+/** e2e test hook: current marker position as data attributes on the marker element. */
+const tagCar = (m: L.Marker | null, p: LatLon) => {
+  const el = m?.getElement()
+  if (!el) return
+  el.setAttribute('data-testid', 'live-car')
+  el.setAttribute('data-lat', p.lat.toFixed(6))
+  el.setAttribute('data-lon', p.lon.toFixed(6))
+}
+
 const tup = (p: LatLon): L.LatLngTuple => [p.lat, p.lon]
 
 type RouteResponse = { code?: string; routes?: Array<{ geometry?: { coordinates?: number[][] } }> }
@@ -121,11 +130,13 @@ export function LiveRideMap({ pickup, destination, car, target }: Props) {
     const to: LatLon = { lat: carLat, lon: carLon }
     const place = (p: LatLon) => {
       carMarker.current?.setLatLng(tup(p))
+      tagCar(carMarker.current, p)
       circle.current?.setLatLng(tup(p))
     }
     if (!carMarker.current) {
       carMarker.current = L.marker(tup(to), { icon: carIcon, interactive: false, keyboard: false, zIndexOffset: 1000 }).addTo(map)
       carPos.current = to
+      tagCar(carMarker.current, to)
     } else if (carPos.current) {
       const from = carPos.current
       carPos.current = to

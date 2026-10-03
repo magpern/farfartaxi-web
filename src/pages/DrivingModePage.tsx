@@ -134,7 +134,7 @@ function DrivingBody({
       )}
       {tracking && (
         <p className={`tiny wake-lock ${wake.held ? 'wake-lock-on' : ''}`} data-testid="wake-lock">
-          {wake.held ? `🔆 ${t('live.wakeLockOn')}` : !wake.supported ? t('live.wakeLockHint') : null}
+          {wake.held ? `🔆 ${t('live.wakeLockOn')}` : t('live.wakeLockHint')}
         </p>
       )}
       {finished && (
