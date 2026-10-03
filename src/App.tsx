@@ -23,6 +23,7 @@ import {
   tokenExpiresWithin,
   AUTH_STORAGE_KEY
 } from './lib/session'
+import { SharePage } from './pages/SharePage'
 import { AppShell } from './shell/AppShell'
 import type { AuthResponse, UserView } from './shell/types'
 
@@ -66,6 +67,7 @@ function App() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<AuthPage />} />
+      <Route path="/dela/:token" element={<SharePage />} />
       <Route path="/app/*" element={<ProtectedApp />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -1,10 +1,40 @@
-import { useEffect } from 'react'
+import { useEffect, useSyncExternalStore } from 'react'
 import { api } from '../api/client'
 import { haversine } from './geo'
 import { DRIVING_STATUSES, type RideResponse } from './rideTypes'
 
 export const GPS_MIN_INTERVAL_MS = 10_000
 export const GPS_MIN_MOVE_M = 50
+
+/** Shared between the shell (which runs the GPS watch) and the driving screen (which shows the banner). */
+export type TrackingError = 'denied' | 'unavailable' | null
+let trackingError: TrackingError = null
+let retryNonce = 0
+const listeners = new Set<() => void>()
+function emit() {
+  listeners.forEach((l) => l())
+}
+function setTrackingError(e: TrackingError) {
+  if (e === trackingError) return
+  trackingError = e
+  emit()
+}
+const subscribe = (l: () => void) => {
+  listeners.add(l)
+  return () => {
+    listeners.delete(l)
+  }
+}
+/** Why location sharing is not working (permission denied / no GPS), or null when it is fine or not needed. */
+export function useTrackingError(): TrackingError {
+  return useSyncExternalStore(subscribe, () => trackingError)
+}
+/** Restart the GPS watch (re-prompts for permission where the browser allows it). */
+export function retryTracking() {
+  retryNonce += 1
+  emit()
+}
+const useRetryNonce = () => useSyncExternalStore(subscribe, () => retryNonce)
 
 type Sent = { lat: number; lon: number; at: number }
 
@@ -22,12 +52,18 @@ export function shouldSendFix(last: Sent | null, lat: number, lon: number, now: 
  */
 export function useDriverTracking(token: string, myRides: RideResponse[]) {
   const activeId = myRides.find((r) => DRIVING_STATUSES.includes(r.status))?.id ?? null
+  const nonce = useRetryNonce()
 
   useEffect(() => {
-    if (activeId === null || typeof navigator === 'undefined' || !navigator.geolocation) return
+    if (activeId === null) return
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setTrackingError('unavailable')
+      return () => setTrackingError(null)
+    }
     let last: Sent | null = null
     const id = navigator.geolocation.watchPosition(
       (pos) => {
+        setTrackingError(null)
         const now = Date.now()
         if (!shouldSendFix(last, pos.coords.latitude, pos.coords.longitude, now)) return
         last = { lat: pos.coords.latitude, lon: pos.coords.longitude, at: now }
@@ -43,11 +79,15 @@ export function useDriverTracking(token: string, myRides: RideResponse[]) {
           /* a missed position update is not worth interrupting the driver */
         })
       },
-      () => {
-        /* permission denied / unavailable: driving still works without live position */
+      (err) => {
+        // Driving still works without live position; the driving screen shows a banner with a retry button.
+        setTrackingError(err.code === 1 ? 'denied' : 'unavailable')
       },
       { enableHighAccuracy: true, maximumAge: 5000 }
     )
-    return () => navigator.geolocation.clearWatch(id)
-  }, [activeId, token])
+    return () => {
+      navigator.geolocation.clearWatch(id)
+      setTrackingError(null)
+    }
+  }, [activeId, token, nonce])
 }

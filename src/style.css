@@ -1792,3 +1792,61 @@ a.link-back {
   display: grid;
   gap: 0.5rem;
 }
+
+/* M7: live tracking */
+.live-map {
+  height: 260px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #1e293b;
+  z-index: 0;
+}
+.live-car span {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  font-size: 26px;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+}
+.live-status {
+  display: grid;
+  gap: 0.25rem;
+  text-align: center;
+}
+.live-status-line {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+.live-status-ago {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.live-stale {
+  margin: 0.25rem 0 0;
+}
+.banner-danger {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  background: #b3261e;
+  color: #fff;
+}
+.wake-lock {
+  margin: 0;
+  text-align: center;
+  color: #94a3b8;
+}
+.wake-lock-on {
+  color: #86efac;
+}
+.share-page {
+  min-height: 100dvh;
+  padding: 1rem;
+}
+.share-wrap {
+  max-width: 520px;
+  margin: 0 auto;
+}

@@ -12,6 +12,7 @@ import { hasAction, PASSENGER_MESSAGE_CODES, type RideResponse } from '../lib/ri
 import { useRideMessages } from '../lib/rideMessages'
 import { formatWeekdayDateTime } from '../lib/time'
 import { useRide } from '../lib/useRide'
+import { isDrivingStatus, targetForStatus } from '../lib/liveTracking'
 import { ContactButtons } from '../components/ContactButtons'
 import { LastUpdated } from '../components/LastUpdated'
 import { QuickMessages } from '../components/QuickMessages'
@@ -19,6 +20,9 @@ import { RatingSheet } from '../components/RatingSheet'
 import { RideMessages } from '../components/RideMessages'
 import { RideTimeEdit } from '../components/RideTimeEdit'
 import { usePassengerRideActions } from '../components/rideActions'
+import { LiveRideMap } from '../components/LiveRideMap'
+import { LiveStatus } from '../components/LiveStatus'
+import { ShareRideButton } from '../components/ShareRideButton'
 import { Button, Card, ConfirmDialog } from '../components/ui'
 import { useActiveRide } from '../shell/ActiveRide'
 import { useShell } from '../shell/ShellContext'
@@ -125,13 +129,15 @@ function RideBody({
   const [savingPlace, setSavingPlace] = useState<PlaceDraft | null>(null)
   const alreadySaved = (saved.places ?? []).some((p) => haversine(p.lat, p.lon, ride.toLat, ride.toLon) < 0.03)
   const canSavePlace = ride.status === 'COMPLETED' && ride.passengerId === userId && saved.places !== null && !alreadySaved
+  const showMap = ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'PICKED_UP'].includes(ride.status)
+  const canShare = ['REQUESTED', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'PICKED_UP'].includes(ride.status)
   const hasDriver = !!ride.acceptedByDriverName && ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'PICKED_UP', 'COMPLETED'].includes(ride.status)
 
   return (
     <>
       <Card tone="highlight" className="ride-hero">
         <h1 className="ride-headline">{t(headlineKey(ride.status), { name: driverFirst })}</h1>
-        {ride.etaMinutes != null && ride.etaMinutes > 0 && !finished && <p className="ride-eta">{t('rides.eta', { min: ride.etaMinutes })}</p>}
+        {ride.etaMinutes != null && ride.etaMinutes > 0 && !finished && !isDrivingStatus(ride.status) && <p className="ride-eta">{t('rides.eta', { min: ride.etaMinutes })}</p>}
         <p className="ride-time">{formatWeekdayDateTime(ride.scheduledAt, dateLocale)}</p>
         <p className="ride-route">
           <strong>{ride.fromAddress}</strong>
@@ -164,8 +170,30 @@ function RideBody({
 
       {ride.pickupNote && !finished && <p className="tiny">{t('pickupNote.show', { note: ride.pickupNote })}</p>}
 
-      {/* M7: the live map for the driver's position goes here. */}
-      <div className="live-map-slot" data-slot="live-map" aria-hidden />
+      {isDrivingStatus(ride.status) && (
+        <LiveStatus
+          status={ride.status}
+          etaTarget={ride.etaTarget}
+          etaMinutes={ride.etaMinutes}
+          lastLocationAt={ride.lastLocationAt}
+          locationStale={ride.locationStale}
+          name={driverFirst}
+        />
+      )}
+      <div className="live-map-slot" data-slot="live-map">
+        {showMap && (
+          <LiveRideMap
+            pickup={{ lat: ride.fromLat, lon: ride.fromLon }}
+            destination={{ lat: ride.toLat, lon: ride.toLon }}
+            target={ride.status === 'PICKED_UP' ? 'DESTINATION' : targetForStatus(ride.status)}
+            car={
+              ride.lastDriverLat != null && ride.lastDriverLon != null && isDrivingStatus(ride.status)
+                ? { lat: ride.lastDriverLat, lon: ride.lastDriverLon, accuracyM: ride.lastLocationAccuracyM }
+                : null
+            }
+          />
+        )}
+      </div>
 
       <RideMessages messages={messages} isMine={(m) => m.senderId === userId} otherName={driverFirst} />
       {hasAction(ride, 'MESSAGE') && (
@@ -188,6 +216,7 @@ function RideBody({
             {t('rides.cancel')}
           </Button>
         )}
+        {canShare && <ShareRideButton rideId={ride.id} token={token} onToast={onToast} />}
         {ride.status === 'COMPLETED' && canRate && (
           <Button variant="primary" size="lg" block onClick={onRate}>
             {t('rating.cta')}

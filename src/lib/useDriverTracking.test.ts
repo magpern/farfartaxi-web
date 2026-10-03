@@ -1,6 +1,6 @@
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { shouldSendFix, useDriverTracking } from './useDriverTracking'
+import { retryTracking, shouldSendFix, useDriverTracking, useTrackingError } from './useDriverTracking'
 import type { RideResponse } from './rideTypes'
 
 const post = vi.fn(() => Promise.resolve())
@@ -49,5 +49,32 @@ describe('useDriverTracking throttle', () => {
 describe('shouldSendFix', () => {
   it('always sends without a previous fix', () => {
     expect(shouldSendFix(null, 0, 0, 0)).toBe(true)
+  })
+})
+
+describe('useDriverTracking accuracy and errors', () => {
+  it('sends accuracy with each position', () => {
+    renderHook(() => useDriverTracking('t', rides))
+    fix(59, 18)
+    const body = JSON.parse((post.mock.calls[0] as unknown as [string, { body: string }])[1].body)
+    expect(body).toEqual({ lat: 59, lon: 18, accuracy: 5 })
+  })
+
+  it('publishes a denied error, clears it on the next fix, and retry restarts the watch', () => {
+    const watch = vi.fn((cb: Cb, err: (e: { code: number }) => void) => ((emit = cb), (emitErr = err), 1))
+    let emitErr: (e: { code: number }) => void = () => {}
+    Object.defineProperty(navigator, 'geolocation', { configurable: true, value: { watchPosition: watch, clearWatch: vi.fn() } })
+    const { result } = renderHook(() => {
+      useDriverTracking('t', rides)
+      return useTrackingError()
+    })
+    expect(result.current).toBeNull()
+    act(() => emitErr({ code: 1 }))
+    expect(result.current).toBe('denied')
+    const before = watch.mock.calls.length
+    act(() => retryTracking())
+    expect(watch.mock.calls.length).toBe(before + 1)
+    act(() => fix(59, 18))
+    expect(result.current).toBeNull()
   })
 })

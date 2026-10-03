@@ -42,6 +42,12 @@ export type RideResponse = {
   lastDriverLat: number | null
   lastDriverLon: number | null
   lastLocationAt: string | null
+  /** GPS accuracy (m) of the last position. */
+  lastLocationAccuracyM?: number | null
+  /** What etaMinutes is measured to. */
+  etaTarget?: 'PICKUP' | 'DESTINATION' | null
+  /** Server says the position is older than 2 min / missing (EN_ROUTE..PICKED_UP). */
+  locationStale?: boolean | null
   pickupNote?: string | null
   urgent?: boolean | null
   passengerName?: string | null

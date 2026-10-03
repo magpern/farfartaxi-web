@@ -1,0 +1,65 @@
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { renderApp } from '../test/render'
+import { ShareRideButton } from './ShareRideButton'
+
+const apiMock = vi.fn()
+vi.mock('../api/client', async (orig) => ({
+  ...(await orig<typeof import('../api/client')>()),
+  api: (...a: unknown[]) => apiMock(...a)
+}))
+
+const toast = vi.fn()
+const show = () => renderApp(<ShareRideButton rideId={7} token="t" onToast={toast} />)
+
+beforeEach(() => {
+  apiMock.mockReset()
+  toast.mockReset()
+  localStorage.clear()
+  apiMock.mockResolvedValue({ token: 'abc', url: 'https://farfartaxi.pernemark.se/dela/abc', expiresAt: 'x' })
+})
+afterEach(() => {
+  delete (navigator as unknown as Record<string, unknown>).share
+})
+
+describe('ShareRideButton', () => {
+  it('uses the native share sheet when available', async () => {
+    const share = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share })
+    show()
+    await userEvent.click(screen.getByRole('button', { name: 'Dela resan' }))
+    await waitFor(() => expect(share).toHaveBeenCalled())
+    expect(share).toHaveBeenCalledWith({ title: 'Farfartaxi', text: 'Följ min resa', url: 'https://farfartaxi.pernemark.se/dela/abc' })
+    expect(apiMock).toHaveBeenCalledWith('/api/rides/7/share', expect.objectContaining({ method: 'POST' }))
+    expect(await screen.findByRole('button', { name: 'Sluta dela' })).toBeInTheDocument()
+  })
+
+  it('falls back to the clipboard with a toast', async () => {
+    const user = userEvent.setup()
+    const spy = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    show()
+    await user.click(screen.getByRole('button', { name: 'Dela resan' }))
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('https://farfartaxi.pernemark.se/dela/abc'))
+    expect(toast).toHaveBeenCalledWith('Delningslänk kopierad.')
+  })
+
+  it('does not toast when the user closes the share sheet', async () => {
+    const share = vi.fn(() => Promise.reject(new DOMException('x', 'AbortError')))
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share })
+    show()
+    await userEvent.click(screen.getByRole('button', { name: 'Dela resan' }))
+    await waitFor(() => expect(share).toHaveBeenCalled())
+    expect(toast).not.toHaveBeenCalled()
+  })
+
+  it('revokes with DELETE', async () => {
+    localStorage.setItem('farfartaxi-shared-7', '1')
+    apiMock.mockResolvedValue(undefined)
+    show()
+    await userEvent.click(screen.getByRole('button', { name: 'Sluta dela' }))
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith('/api/rides/7/share', expect.objectContaining({ method: 'DELETE' })))
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Sluta dela' })).toBeNull())
+    expect(toast).toHaveBeenCalledWith('Delningen är avslutad.')
+  })
+})
