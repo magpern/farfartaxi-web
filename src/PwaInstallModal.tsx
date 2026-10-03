@@ -3,6 +3,7 @@ import { useI18n } from './i18n/context'
 
 export const FARFARTAXI_PWA_INSTALL_SESSION_KEY = 'farfartaxi-install-prompt'
 
+// eslint-disable-next-line react-refresh/only-export-components -- exports non-component helpers alongside components (pre-existing); splitting is deferred to gradual refactor
 export function schedulePwaInstallPrompt() {
   try {
     sessionStorage.setItem(FARFARTAXI_PWA_INSTALL_SESSION_KEY, '1')
@@ -11,6 +12,7 @@ export function schedulePwaInstallPrompt() {
   }
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- exports non-component helpers alongside components (pre-existing); splitting is deferred to gradual refactor
 export function isStandalonePwa(): boolean {
   if (typeof window === 'undefined') return false
   if (window.matchMedia('(display-mode: standalone)').matches) return true
