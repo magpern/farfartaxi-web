@@ -81,7 +81,15 @@
     "timePickerMinuteField": "Minute",
     "timePickerOpen": "Open time picker",
     "continue": "Continue",
-    "weekdayLetters": ["M", "T", "W", "T", "F", "S", "S"],
+    "weekdayLetters": [
+      "M",
+      "T",
+      "W",
+      "T",
+      "F",
+      "S",
+      "S"
+    ],
     "missingAddresses": "Addresses missing.",
     "futureTime": "Choose a time in the future."
   },
@@ -162,7 +170,13 @@
     "toastBlocked": "User blocked.",
     "toastUnblocked": "User unblocked.",
     "toastUserDeleted": "User deleted.",
-    "toastRideDeleted": "Trip deleted."
+    "toastRideDeleted": "Trip deleted.",
+    "pendingTitle": "Awaiting approval",
+    "approve": "Approve",
+    "reject": "Reject",
+    "rejectConfirm": "Reject and delete this account?",
+    "toastApproved": "Account approved",
+    "toastRejected": "Account rejected and removed"
   },
   "pwa": {
     "installTitle": "Add Farfartaxi to your home screen",
@@ -196,5 +210,12 @@
   "languages": {
     "sv": "Svenska",
     "en": "English"
+  },
+  "pending": {
+    "title": "Your account is awaiting approval",
+    "body": "An adult in the family needs to approve your account before you can book.",
+    "recheck": "Check again",
+    "logout": "Log out",
+    "stillPending": "Not approved yet. Please try again a little later."
   }
 }

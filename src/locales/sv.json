@@ -81,7 +81,15 @@
     "timePickerMinuteField": "Minut",
     "timePickerOpen": "Öppna tidsväljare",
     "continue": "Fortsätt",
-    "weekdayLetters": ["M", "T", "O", "T", "F", "L", "S"],
+    "weekdayLetters": [
+      "M",
+      "T",
+      "O",
+      "T",
+      "F",
+      "L",
+      "S"
+    ],
     "missingAddresses": "Saknar adresser.",
     "futureTime": "Välj en tid i framtiden."
   },
@@ -162,7 +170,13 @@
     "toastBlocked": "Användare blockerad.",
     "toastUnblocked": "Användare avblockerad.",
     "toastUserDeleted": "Användare borttagen.",
-    "toastRideDeleted": "Resa borttagen."
+    "toastRideDeleted": "Resa borttagen.",
+    "pendingTitle": "Väntar på godkännande",
+    "approve": "Godkänn",
+    "reject": "Neka",
+    "rejectConfirm": "Vill du neka och ta bort det här kontot?",
+    "toastApproved": "Kontot är godkänt",
+    "toastRejected": "Kontot har nekats och tagits bort"
   },
   "pwa": {
     "installTitle": "Lägg till Farfartaxi på hemskärmen",
@@ -196,5 +210,12 @@
   "languages": {
     "sv": "Svenska",
     "en": "English"
+  },
+  "pending": {
+    "title": "Ditt konto väntar på godkännande",
+    "body": "En vuxen i familjen behöver godkänna ditt konto innan du kan boka.",
+    "recheck": "Kolla igen",
+    "logout": "Logga ut",
+    "stillPending": "Inte godkänt än. Försök igen lite senare."
   }
 }
