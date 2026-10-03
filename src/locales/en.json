@@ -454,5 +454,17 @@
     "unreachable": "Couldn't reach the server — retrying",
     "actionFailed": "Couldn't reach the server — please try again",
     "lastUpdated": "Last updated {{time}}"
+  },
+  "placeSearch": {
+    "results": "Search results",
+    "searching": "Searching…",
+    "empty": "No results.",
+    "emptyHint": "Try another name, for example a bus stop or a shopping centre.",
+    "error": "The search did not work just now. Please try again shortly.",
+    "showMore": "Show more",
+    "myPosition": "📍 My position",
+    "selectedPlace": "Selected place",
+    "hereStop": "📍 Here ({{name}}, {{dist}})",
+    "useStop": "Use the stop as pickup"
   }
 }

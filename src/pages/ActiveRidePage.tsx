@@ -204,7 +204,7 @@ function RideBody({
         onConfirm={() => void a.cancelRide(true)}
       />
       {a.editing && (
-        <RideTimeEdit open ride={ride} busy={a.busy} onCancel={() => a.setEditing(false)} onSave={(patch) => void a.saveEdit(patch)} />
+        <RideTimeEdit open token={token} ride={ride} busy={a.busy} onCancel={() => a.setEditing(false)} onSave={(patch) => void a.saveEdit(patch)} />
       )}
     </>
   )

@@ -454,5 +454,17 @@
     "unreachable": "Kunde inte nå servern — försöker igen",
     "actionFailed": "Kunde inte nå servern — försök igen",
     "lastUpdated": "Senast uppdaterad {{time}}"
+  },
+  "placeSearch": {
+    "results": "Sökträffar",
+    "searching": "Söker…",
+    "empty": "Inga träffar.",
+    "emptyHint": "Prova ett annat namn, till exempel en hållplats eller ett köpcentrum.",
+    "error": "Sökningen fungerade inte just nu. Försök igen om en stund.",
+    "showMore": "Visa fler",
+    "myPosition": "📍 Min position",
+    "selectedPlace": "Vald plats",
+    "hereStop": "📍 Här ({{name}}, {{dist}})",
+    "useStop": "Använd hållplatsen som start"
   }
 }
