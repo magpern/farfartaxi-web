@@ -444,8 +444,40 @@
     }
   },
   "places": {
-    "comingTitle": "Coming soon",
-    "comingBody": "Soon you can save home, school and other favourite places here."
+    "title": "My places",
+    "titleFor": "Places for {{name}}",
+    "forWho": "Places for…",
+    "mine": "My own places",
+    "empty": "Save home, school and other places you often go to, so one tap is enough.",
+    "add": "Add place",
+    "searchPlaceholder": "Search for an address or place",
+    "searchAria": "Search for a place to save",
+    "save": "Save",
+    "saveTitle": "Save place",
+    "saveAria": "Save {{name}} as a favourite",
+    "saveAsPlace": "Save as place",
+    "nameLabel": "Name",
+    "kindLabel": "Kind of place",
+    "savedToast": "Saved {{name}}",
+    "editTitle": "Edit place",
+    "editAria": "Edit {{name}}",
+    "moveUp": "Move {{name}} up",
+    "moveDown": "Move {{name}} down",
+    "deleteAria": "Remove {{name}}",
+    "deleteTitle": "Remove {{name}}?",
+    "delete": "Remove",
+    "forPlaces": "Places for…",
+    "kind": {
+      "HOME": "Home",
+      "SCHOOL": "School",
+      "SPORTS": "Sports",
+      "WORK": "Work",
+      "FAMILY": "Family",
+      "OTHER": "Favourite"
+    },
+    "nameInvalid": "The name is too long or invalid",
+    "savedToastFor": "Saved {{name}} for {{who}}",
+    "saveTitleFor": "Save place for {{who}}"
   },
   "more": {
     "largeText": "Large text",
@@ -471,5 +503,23 @@
     "useStop": "Use the stop as pickup",
     "nearStop": "Near {{name}}",
     "gpsFallback": "My position (GPS) {{lat}}, {{lon}}"
+  },
+  "home": {
+    "title": "Where to?",
+    "goHome": "🏠 Go home",
+    "saveHome": "🏠 Save your home",
+    "favorites": "Favourites",
+    "recents": "Recent",
+    "whenTitle": "When do you want to go?",
+    "now": "Now",
+    "pickTime": "Pick a time",
+    "route": "From {{from}} to {{to}}",
+    "needPickup": "First choose where you are, then we go home.",
+    "rebook": "Book again",
+    "rebookAria": "Book the ride to {{to}} again",
+    "locating": "Getting your position…",
+    "choosePickup": "Choose where you are",
+    "choosePickupHelp": "We can't find your position. Choose where you are and we'll head home.",
+    "retry": "Try again"
   }
 }

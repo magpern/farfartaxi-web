@@ -444,8 +444,40 @@
     }
   },
   "places": {
-    "comingTitle": "Kommer snart",
-    "comingBody": "Här kan du snart spara hem, skolan och andra favoritplatser."
+    "title": "Mina platser",
+    "titleFor": "Platser för {{name}}",
+    "forWho": "Platser för…",
+    "mine": "Mina egna platser",
+    "empty": "Spara hem, skolan och andra ställen du ofta åker till – då räcker det med ett tryck.",
+    "add": "Lägg till plats",
+    "searchPlaceholder": "Sök adress eller plats",
+    "searchAria": "Sök plats att spara",
+    "save": "Spara",
+    "saveTitle": "Spara plats",
+    "saveAria": "Spara {{name}} som favorit",
+    "saveAsPlace": "Spara som plats",
+    "nameLabel": "Namn",
+    "kindLabel": "Typ av plats",
+    "savedToast": "Sparade {{name}}",
+    "editTitle": "Ändra plats",
+    "editAria": "Ändra {{name}}",
+    "moveUp": "Flytta upp {{name}}",
+    "moveDown": "Flytta ner {{name}}",
+    "deleteAria": "Ta bort {{name}}",
+    "deleteTitle": "Ta bort {{name}}?",
+    "delete": "Ta bort",
+    "forPlaces": "Platser för…",
+    "kind": {
+      "HOME": "Hem",
+      "SCHOOL": "Skolan",
+      "SPORTS": "Idrott",
+      "WORK": "Jobb",
+      "FAMILY": "Familj",
+      "OTHER": "Favorit"
+    },
+    "nameInvalid": "Namnet är för långt eller ogiltigt",
+    "savedToastFor": "Sparade {{name}} för {{who}}",
+    "saveTitleFor": "Spara plats för {{who}}"
   },
   "more": {
     "largeText": "Stor text",
@@ -471,5 +503,23 @@
     "useStop": "Använd hållplatsen som start",
     "nearStop": "Nära {{name}}",
     "gpsFallback": "Min position (GPS) {{lat}}, {{lon}}"
+  },
+  "home": {
+    "title": "Vart ska du?",
+    "goHome": "🏠 Åk hem",
+    "saveHome": "🏠 Spara ditt hem",
+    "favorites": "Favoriter",
+    "recents": "Senaste",
+    "whenTitle": "När vill du åka?",
+    "now": "Nu",
+    "pickTime": "Välj tid",
+    "route": "Från {{from}} till {{to}}",
+    "needPickup": "Välj först var du är, så åker vi hem.",
+    "rebook": "Boka igen",
+    "rebookAria": "Boka resan till {{to}} igen",
+    "locating": "Hämtar din position…",
+    "choosePickup": "Välj var du är",
+    "choosePickupHelp": "Vi hittar inte din position. Välj var du är, så åker vi hem.",
+    "retry": "Försök igen"
   }
 }

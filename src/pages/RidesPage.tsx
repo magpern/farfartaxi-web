@@ -11,18 +11,29 @@ import { RatingSheet } from '../components/RatingSheet'
 import { Button, Card, StatusPill } from '../components/ui'
 import { pollWhileVisible } from '../lib/pollWhileVisible'
 import { useShell } from '../shell/ShellContext'
+import { useBookingDraft } from '../shell/BookingDraftContext'
+import { bookPath } from '../shell/types'
+import { defaultDraft } from '../lib/bookingDraft'
+import { haversine } from '../lib/geo'
+import { useSavedPlaces } from '../lib/useSavedPlaces'
+import { SavePlaceSheet } from '../components/SavePlaceSheet'
+import type { PlaceDraft } from '../api/savedPlaces'
 
 /** Compact row for a finished ride. */
 export function PastRideRow({
   ride,
   perspective,
   onRate,
-  onDelete
+  onDelete,
+  onRebook,
+  onSavePlace
 }: {
   ride: RideResponse
   perspective: 'passenger' | 'driver'
   onRate?: (id: number) => void
   onDelete?: (id: number) => void
+  onRebook?: (ride: RideResponse) => void
+  onSavePlace?: (ride: RideResponse) => void
 }) {
   const { t, locale } = useI18n()
   const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
@@ -37,6 +48,16 @@ export function PastRideRow({
       </p>
       <div className="row ride-actions">
         {onRate && ride.status === 'COMPLETED' && !ride.feedbackGiven && <Button onClick={() => onRate(ride.id)}>{t('rating.cta')}</Button>}
+        {onRebook && (
+          <Button onClick={() => onRebook(ride)} aria-label={t('home.rebookAria', { to: ride.toAddress })}>
+            🔁 {t('home.rebook')}
+          </Button>
+        )}
+        {onSavePlace && (
+          <Button onClick={() => onSavePlace(ride)} aria-label={t('places.saveAria', { name: ride.toAddress })}>
+            ⭐ {t('places.saveAsPlace')}
+          </Button>
+        )}
         {onDelete && ride.status === 'CANCELLED' && (
           <Button variant="danger" onClick={() => onDelete(ride.id)}>
             {t('rides.delete')}
@@ -60,6 +81,9 @@ export function RidesPage() {
   const { t } = useI18n()
   const { token, user, onToast } = useShell()
   const navigate = useNavigate()
+  const { setDraft } = useBookingDraft()
+  const saved = useSavedPlaces(token)
+  const [savingPlace, setSavingPlace] = useState<PlaceDraft | null>(null)
   const [rides, setRides] = useState<RideResponse[] | null>(null)
   const [failed, setFailed] = useState(false)
   const [rateId, setRateId] = useState<number | null>(null)
@@ -105,6 +129,23 @@ export function RidesPage() {
     }
   }
 
+  /** Completed rides to a destination that is not already a saved place. */
+  const canSave = (r: RideResponse) =>
+    r.status === 'COMPLETED' && saved.places !== null && !saved.places.some((p) => haversine(p.lat, p.lon, r.toLat, r.toLon) < 0.03)
+
+  function rebook(r: RideResponse) {
+    setDraft({
+      ...defaultDraft,
+      fromAddress: r.fromAddress,
+      fromLat: r.fromLat,
+      fromLon: r.fromLon,
+      toAddress: r.toAddress,
+      toLat: r.toLat,
+      toLon: r.toLon
+    })
+    navigate(bookPath(user.role), { state: { step: 'when' } })
+  }
+
   const card = (ride: RideResponse) => (
     <PassengerRideCard
       key={ride.id}
@@ -134,11 +175,27 @@ export function RidesPage() {
           </Section>
           <Section title={t('rides.groupPast')} empty={t('rides.noHistory')} count={groups.past.length}>
             {groups.past.map((r) => (
-              <PastRideRow key={r.id} ride={r} perspective="passenger" onRate={setRateId} onDelete={deleteRide} />
+              <PastRideRow
+                key={r.id}
+                ride={r}
+                perspective="passenger"
+                onRate={setRateId}
+                onDelete={deleteRide}
+                onRebook={rebook}
+                onSavePlace={canSave(r) ? (x) => setSavingPlace({ name: x.toAddress, address: x.toAddress, lat: x.toLat, lon: x.toLon }) : undefined}
+              />
             ))}
           </Section>
         </>
       )}
+      <SavePlaceSheet
+        open={savingPlace !== null}
+        place={savingPlace}
+        token={token}
+        onClose={() => setSavingPlace(null)}
+        onSaved={() => void saved.reload()}
+        onToast={onToast}
+      />
       <RatingSheet
         open={rateId !== null}
         onClose={() => setRateId(null)}

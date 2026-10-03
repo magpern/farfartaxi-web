@@ -20,6 +20,8 @@ type Props = {
   /** Optional `data-booking-field` attribute (focus target for "edit" links). */
   fieldName?: string
   inputType?: 'text' | 'search'
+  /** Shows a "⭐ Spara" action on each result. */
+  onSave?: (place: PlaceResult) => void
 }
 
 /** Combobox with live place suggestions. Selecting records the choice for learned ranking (fire-and-forget). */
@@ -35,7 +37,8 @@ export function PlaceSearchInput({
   clearLabel,
   onFocus,
   fieldName,
-  inputType = 'text'
+  inputType = 'text',
+  onSave
 }: Props) {
   const listId = useId()
   const [open, setOpen] = useState(false)
@@ -122,6 +125,7 @@ export function PlaceSearchInput({
           activeIndex={activeIndex}
           onPick={pick}
           onShowMore={search.showMore}
+          onSave={onSave}
         />
       )}
     </div>

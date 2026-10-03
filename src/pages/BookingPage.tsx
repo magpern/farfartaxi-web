@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useI18n } from '../i18n/context'
@@ -22,6 +22,12 @@ import { isDriverRole } from '../shell/types'
 import { BookingConfirmSheet, PassengerPicker } from '../components/BookingConfirmSheet'
 import { focusBookingField, type BookingEditField } from '../components/bookingFocus'
 import { useBookingUsers } from '../lib/useBookingUsers'
+import { useRecentPlaces, useSavedPlaces } from '../lib/useSavedPlaces'
+import { draftFromResult, type PlaceDraft } from '../api/savedPlaces'
+import { HomeShortcuts } from '../components/HomeShortcuts'
+import { SavePlaceSheet } from '../components/SavePlaceSheet'
+import { BottomSheet } from '../components/ui/BottomSheet'
+import { Button } from '../components/ui/Button'
 
 const MAX_PICKUP_ACCURACY_M = 1000
 const isAccurateFix = (accuracy: number | undefined) =>
@@ -53,12 +59,20 @@ export function BookingPage() {
   const tRef = useRef(t)
   tRef.current = t
   const navigate = useNavigate()
+  const location = useLocation()
   const { draft, setDraft, clearBookingDraft } = useBookingDraft()
   const isDriver = isDriverRole(currentUser.role)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [whenOpen, setWhenOpen] = useState(false)
+  const [toSave, setToSave] = useState<PlaceDraft | null>(null)
+  // A driver booking for a passenger uses that passenger's places; otherwise the user's own.
+  const forUserId = isDriver ? draft.passengerUserId : undefined
+  const { places: savedPlaces, failed: savedFailed, reload: reloadSaved } = useSavedPlaces(token, forUserId)
+  const recents = useRecentPlaces(token, forUserId)
+  const homePlace = savedPlaces?.find((p) => p.kind === 'HOME') ?? null
   const { busy: booking, run: runBooking } = useBusy()
   const idempotency = useRef(createIdempotencyHolder())
-  const bookingUsers = useBookingUsers(token, isDriver && sheetOpen)
+  const bookingUsers = useBookingUsers(token, isDriver)
   const draftRef = useRef(draft)
   draftRef.current = draft
   const mapRef = useRef<L.Map | null>(null)
@@ -81,6 +95,10 @@ export function BookingPage() {
   const [gps, setGps] = useState<Gps | null>(null)
   const [resolving, setResolving] = useState(false)
   const [stop, setStop] = useState<NearestStop | null>(null)
+  /** Cold-start location fix: 'pending' until the first answer; 'failed' on error / no permission / coarse fix. */
+  const [gpsState, setGpsState] = useState<'pending' | 'fix' | 'failed'>(() =>
+    typeof navigator !== 'undefined' && navigator.geolocation ? 'pending' : 'failed'
+  )
 
   activeFieldRef.current = activeField
 
@@ -179,21 +197,31 @@ export function BookingPage() {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const { latitude, longitude, accuracy } = pos.coords
-          if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return
+          if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            setGpsState('failed')
+            return
+          }
           setGps({ lat: latitude, lon: longitude, accuracy: Number.isFinite(accuracy) ? accuracy : undefined })
-          const m = mapRef.current
-          if (!m || !bothAddressesEmpty) return
           // A coarse fix (cell/IP based) is no pickup: only trust it below 1 km.
-          if (!isAccurateFix(accuracy)) return
+          if (!isAccurateFix(accuracy)) {
+            setGpsState('failed')
+            return
+          }
+          setGpsState('fix')
           const cur = draftRef.current
-          if (cur.fromAddress.trim() || cur.toAddress.trim()) return
-          programmaticCameraRef.current = true
-          skipReverseOnMoveEndRef.current = true
-          m.setView([latitude, longitude], 17)
-          lastStableMapCenterRef.current = { lat: latitude, lng: longitude }
-          window.setTimeout(() => {
-            programmaticCameraRef.current = false
-          }, 80)
+          // Pickup is set whenever it is still empty (also when "Åk hem" already filled the destination).
+          if (cur.fromAddress.trim()) return
+          const m = mapRef.current
+          // Only move the camera when no destination was chosen meanwhile.
+          if (m && !cur.toAddress.trim()) {
+            programmaticCameraRef.current = true
+            skipReverseOnMoveEndRef.current = true
+            m.setView([latitude, longitude], 17)
+            lastStableMapCenterRef.current = { lat: latitude, lng: longitude }
+            window.setTimeout(() => {
+              programmaticCameraRef.current = false
+            }, 80)
+          }
           // Default pickup: where the phone is.
           setDraft((d) =>
             d.fromAddress.trim()
@@ -203,6 +231,7 @@ export function BookingPage() {
         },
         () => {
           /* keep default map center; permission denied or timeout: search still works without a context */
+          setGpsState('failed')
         },
         { enableHighAccuracy: false, maximumAge: 60_000, timeout: 12_000 }
       )
@@ -524,6 +553,42 @@ export function BookingPage() {
     void resolveThen(() => setSheetOpen(true))
   }
 
+  /** Favourite / recent / home: one tap fills the destination. */
+  function fillDestination(p: { label: string; address: string; lat: number; lon: number }) {
+    applySearchResult(
+      { provider: 'FAVORITE', providerPlaceId: null, kind: 'FAVORITE', name: p.label, area: null, formattedAddress: p.address, lat: p.lat, lon: p.lon, distanceKm: null },
+      'to'
+    )
+  }
+
+  function goHome() {
+    if (!homePlace) {
+      navigate('/app/platser?add=HOME')
+      return
+    }
+    fillDestination({ label: homePlace.label, address: homePlace.formattedAddress || homePlace.address, lat: homePlace.lat, lon: homePlace.lon })
+    if (!draftRef.current.fromAddress.trim()) {
+      if (gpsState !== 'pending') {
+        onToast(t('home.needPickup'))
+        focusBookingField('from')
+        return
+      }
+      // Slow cold-start fix: the sheet waits for it ("Hämtar din position…") instead of bouncing the user.
+    }
+    setWhenOpen(true)
+  }
+
+  // "Boka igen" arrives here with a filled draft and asks for the Nu / Välj tid step.
+  const wantsWhen = (location.state as { step?: string } | null)?.step === 'when'
+  const whenAsked = useRef(false)
+  useEffect(() => {
+    if (!wantsWhen || whenAsked.current) return
+    whenAsked.current = true
+    if (draftRef.current.fromAddress.trim() && draftRef.current.toAddress.trim()) setWhenOpen(true)
+    // Used once: clear the router state so Back never reopens the sheet.
+    navigate(location.pathname + location.search, { replace: true, state: null })
+  }, [wantsWhen, navigate, location.pathname, location.search])
+
   function editFromSheet(field: BookingEditField) {
     if (field === 'who') {
       focusBookingField(field) // the passenger picker lives inside the sheet: keep it open
@@ -540,6 +605,11 @@ export function BookingPage() {
   const bookedFor = isDriver && draft.passengerUserId != null
     ? (bookingUsers?.find((u) => u.id === draft.passengerUserId)?.fullName ?? null)
     : null
+  const saveForName = bookedFor?.split(' ')[0] ?? null
+  const homeStatus = savedPlaces === null ? 'loading' : savedFailed && !homePlace ? 'failed' : 'ready'
+  const pickupEmpty = !draft.fromAddress.trim()
+  const waitingForFix = whenOpen && pickupEmpty && gpsState === 'pending'
+  const needsPickup = whenOpen && pickupEmpty && gpsState === 'failed'
 
   return (
     <div className="booking-layout">
@@ -547,7 +617,18 @@ export function BookingPage() {
         <div ref={mapNode} className="map map-hero-map" />
       </div>
       <div className="booking-sheet">
-        <h2 className="sheet-title">{t('booking.planTrip')}</h2>
+        <h2 className="sheet-title">{t('home.title')}</h2>
+        <HomeShortcuts
+          places={savedPlaces ?? []}
+          recents={recents}
+          hasHome={homePlace !== null}
+          homeStatus={homeStatus}
+          onRetry={() => void reloadSaved()}
+          disabled={booking || resolving}
+          onGoHome={goHome}
+          onPlace={(p) => fillDestination({ label: p.label, address: p.formattedAddress || p.address, lat: p.lat, lon: p.lon })}
+          onRecent={(p) => applySearchResult(p, 'to')}
+        />
         <div className="address-flow">
           <div className="address-line" aria-hidden />
           <div className="address-fields">
@@ -600,6 +681,7 @@ export function BookingPage() {
                 setDraft((d) => ({ ...d, toAddress: v }))
               }}
               onSelect={(p) => applySearchResult(p, 'to')}
+              onSave={(p) => setToSave(draftFromResult(p))}
               onClear={() => clearField('to')}
             />
           </div>
@@ -610,6 +692,13 @@ export function BookingPage() {
             : t('booking.distanceKm', { km: distanceKm.toFixed(2) })}
         </p>
         {roadRoute && <p className="dist-hint dist-hint-sub">{t('booking.routingAttribution')}</p>}
+        {isDriver && (
+          <p className="tiny">
+            <Link to={draft.passengerUserId != null ? `/app/platser?userId=${draft.passengerUserId}` : '/app/platser'}>
+              {t('places.forPlaces')}
+            </Link>
+          </p>
+        )}
         <PickupNoteField
           value={draft.pickupNote ?? ''}
           onChange={(v) => setDraft((d) => ({ ...d, pickupNote: v }))}
@@ -623,6 +712,63 @@ export function BookingPage() {
           </button>
         </div>
       </div>
+      <BottomSheet open={whenOpen} title={t('home.whenTitle')} onClose={() => setWhenOpen(false)}>
+        <div className="stack">
+          {waitingForFix ? (
+            <p className="muted" role="status">{t('home.locating')}</p>
+          ) : needsPickup ? (
+            <p className="muted" role="status">{t('home.choosePickupHelp')}</p>
+          ) : (
+            <p className="muted">{t('home.route', { from: draft.fromIsGps ? t('placeSearch.myPosition') : draft.fromAddress, to: draft.toAddress })}</p>
+          )}
+          {needsPickup && (
+            <Button
+              variant="primary"
+              size="lg"
+              block
+              onClick={() => {
+                setWhenOpen(false)
+                focusBookingField('from')
+              }}
+            >
+              {t('home.choosePickup')}
+            </Button>
+          )}
+          <Button
+            variant="primary"
+            size="lg"
+            block
+            disabled={resolving || pickupEmpty}
+            onClick={() => {
+              setWhenOpen(false)
+              bookAkaNu()
+            }}
+          >
+            {t('home.now')}
+          </Button>
+          <Button
+            size="lg"
+            block
+            disabled={resolving || pickupEmpty}
+            onClick={() => {
+              setWhenOpen(false)
+              goForboka()
+            }}
+          >
+            {t('home.pickTime')}
+          </Button>
+        </div>
+      </BottomSheet>
+      <SavePlaceSheet
+        open={toSave !== null}
+        place={toSave}
+        token={token}
+        userId={forUserId}
+        forName={saveForName}
+        onClose={() => setToSave(null)}
+        onSaved={() => void reloadSaved()}
+        onToast={onToast}
+      />
       <BookingConfirmSheet
         open={sheetOpen}
         busy={booking}
