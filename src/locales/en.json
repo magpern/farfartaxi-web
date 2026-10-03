@@ -7,7 +7,8 @@
     "cancel": "Cancel",
     "close": "Close",
     "working": "Wait…",
-    "call": "Call"
+    "call": "Call",
+    "loading": "Loading…"
   },
   "landing": {
     "subtitle": "Book the family’s safest taxi. Simple, fast, and mobile-friendly.",
@@ -121,13 +122,11 @@
     "shareTrip": "Share trip",
     "shareTripHint": "Copies a time-limited link so family can follow live ETA in the browser—no login needed.",
     "cancelReasonAfterAccept": "Passenger cancelled the trip",
-    "thanksStars": "Thanks + 5★",
     "cancelledToast": "Trip cancelled.",
     "deletedToast": "Trip removed from your list.",
     "shareCopiedToast": "Share link copied.",
     "feedbackThanksToast": "Thanks for your feedback!",
     "cancelReason": "User cancelled",
-    "feedbackComment": "Best grandpa!",
     "waiting": "We are asking the drivers right now.",
     "noDriverHint": "No driver has said yes yet. Keep waiting, change the time or call grandpa.",
     "keepWaiting": "Keep waiting",
@@ -152,7 +151,13 @@
     "editSearchPlaceholder": "Search a new address",
     "editSearchLabel": "Search address",
     "editClearDestination": "Keep current",
-    "editNothingChanged": "Change something to save."
+    "editNothingChanged": "Change something to save.",
+    "open": "Open",
+    "smsDriver": "SMS",
+    "groupOngoing": "Ongoing",
+    "groupUpcoming": "Upcoming",
+    "groupPast": "Past",
+    "noOngoing": "No ride in progress."
   },
   "driver": {
     "panel": "Driver panel",
@@ -206,7 +211,20 @@
     "availabilitySaved": "Availability saved.",
     "awayInvalid": "The end date cannot be before the start date.",
     "passengerFallback": "Passenger",
-    "changedRide": "{{name}} changed the ride — confirm"
+    "changedRide": "{{name}} changed the ride — confirm",
+    "smsPassenger": "SMS",
+    "openDriving": "Open driving mode",
+    "continueDriving": "Keep driving",
+    "nextRide": "Next ride: pick up {{name}}",
+    "todayRides": "My rides today",
+    "noTodayRides": "No rides today.",
+    "allMyRides": "All my rides",
+    "bookRide": "Book a ride",
+    "modeDrive": "I drive",
+    "modeRide": "I ride",
+    "groupToday": "Today",
+    "groupUpcoming": "Upcoming",
+    "groupPast": "Past"
   },
   "admin": {
     "logoutEverywhere": "Log out everywhere",
@@ -257,15 +275,16 @@
     "manualAndroid": "Android: open the menu (⋮) and choose “Install app” or “Add to Home screen”.",
     "manualDesktop": "Desktop: use the install icon in the address bar or the browser menu (e.g. “Install Farfartaxi” / Apps).",
     "helpCalloutTitle": "Add to Home Screen",
-    "helpCalloutLead": "Open the menu (☰) and choose “Add to Home Screen”, or follow the steps for your device below."
+    "helpCalloutLead": "Open the More tab and choose «Add to home screen», or follow the instructions for your device below."
   },
   "help": {
     "title": "Help & FAQ",
     "items": [
-      "Menu (☰) → “Add to Home Screen”, or use the prompt after you log in.",
-      "Allow notifications for booking updates.",
+      "More → «Add to home screen» — or wait for the prompt after signing in.",
+      "Allow notifications to get booking updates.",
       "Drivers should keep the app open for better live ETA via GPS.",
-      "Use “Share trip” to share ETA with family."
+      "Use \"Share ride\" to share the ETA with family.",
+      "Need bigger text? More → Large text."
     ],
     "footer": "Farfartaxi is family-friendly, fast, and fun to use."
   },
@@ -336,5 +355,92 @@
     "placeholder": "E.g. blue door, use the intercom",
     "count": "{{n}}/280",
     "show": "Message: {{note}}"
+  },
+  "tabs": {
+    "aria": "Main navigation",
+    "book": "Book",
+    "rides": "My rides",
+    "places": "Places",
+    "more": "More",
+    "requests": "Requests"
+  },
+  "activeRide": {
+    "headline": {
+      "REQUESTED": "Looking for a driver…",
+      "NO_DRIVER": "No driver has said yes yet",
+      "ACCEPTED": "{{name}} is picking you up",
+      "EN_ROUTE": "{{name}} is on the way",
+      "ARRIVED": "{{name}} is here – come out!",
+      "PICKED_UP": "You're on your way",
+      "COMPLETED": "You're there! Thanks for riding",
+      "CANCELLED": "The ride was cancelled",
+      "UNKNOWN": "Your ride"
+    },
+    "gone": "This ride no longer exists.",
+    "unreachable": "Couldn't reach the server. Try again in a moment.",
+    "toHome": "Go to start",
+    "bookNew": "Book a new ride",
+    "open": "Open the ride"
+  },
+  "contact": {
+    "call": "Call",
+    "sms": "SMS",
+    "callAria": "Call {{name}}",
+    "smsAria": "Text {{name}}"
+  },
+  "lastUpdated": {
+    "stale": "Couldn't reach the server – showing the last known information.",
+    "at": "Last updated {{time}}"
+  },
+  "bookingConfirm": {
+    "title": "Is this right?",
+    "who": "Who",
+    "when": "When",
+    "pickup": "Pickup",
+    "destination": "Going to",
+    "note": "Message",
+    "noNote": "No message",
+    "now": "Now – as soon as a driver says yes",
+    "edit": "Change",
+    "editAria": "Change {{what}}",
+    "forName": "For {{name}}",
+    "bookedBy": "Booked by {{name}}",
+    "confirmNow": "Yes, book now",
+    "confirmLater": "Yes, book the ride"
+  },
+  "rating": {
+    "title": "How was the ride?",
+    "send": "Send",
+    "starsAria": "Rating",
+    "starAria": "{{n}} of 5 stars",
+    "commentLabel": "Want to add something? (optional)",
+    "commentPlaceholder": "E.g. thanks for the lift!",
+    "cta": "Rate the ride"
+  },
+  "driving": {
+    "back": "‹ Requests",
+    "pickup": "Pick up at",
+    "destination": "Drive to",
+    "pickupTime": "Pickup at {{time}}",
+    "thenTo": "Then to",
+    "noteFrom": "Message from {{name}}:",
+    "done": "Done – go back",
+    "headline": {
+      "ACCEPTED": "Time to pick up {{name}}",
+      "EN_ROUTE": "Driving to pick up {{name}}",
+      "ARRIVED": "You're at {{name}}'s pickup",
+      "PICKED_UP": "{{name}} is in – drive to the destination",
+      "COMPLETED": "Done! Nice work",
+      "CANCELLED": "The ride was cancelled",
+      "OTHER": "The ride"
+    }
+  },
+  "places": {
+    "comingTitle": "Coming soon",
+    "comingBody": "Soon you can save home, school and other favourite places here."
+  },
+  "more": {
+    "largeText": "Large text",
+    "largeTextHint": "Makes all text in the app bigger"
   }
 }

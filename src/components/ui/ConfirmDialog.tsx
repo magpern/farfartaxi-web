@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import { Button } from './Button'
+import { useOverlayOpen } from './overlayRegistry'
 
 type Props = {
   open: boolean
@@ -14,7 +16,7 @@ type Props = {
   children?: ReactNode
 }
 
-/** Minimal modal confirm; M2 replaces this with the shared ui/ConfirmDialog. */
+/** Modal confirm: big buttons, cancel on the left, confirm on the right. */
 export function ConfirmDialog({
   open,
   title,
@@ -28,6 +30,7 @@ export function ConfirmDialog({
   danger,
   children
 }: Props) {
+  useOverlayOpen(open)
   if (!open) return null
   return (
     <div
@@ -44,17 +47,17 @@ export function ConfirmDialog({
         {body && <p className="install-modal-lead">{body}</p>}
         {children}
         <div className="install-modal-actions">
-          <button type="button" className="btn btn-touch btn-outline" onClick={onCancel} disabled={busy}>
+          <Button variant="secondary" size="lg" onClick={onCancel} disabled={busy}>
             {cancelLabel}
-          </button>
-          <button
-            type="button"
-            className={`btn btn-touch ${danger ? 'btn-danger' : 'btn-primary'}`}
+          </Button>
+          <Button
+            variant={danger ? 'danger' : 'primary'}
+            size="lg"
             onClick={onConfirm}
             disabled={busy || confirmDisabled}
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

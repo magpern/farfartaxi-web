@@ -1,0 +1,206 @@
+import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { api } from '../api/client'
+import { useI18n } from '../i18n/context'
+import { apiErrorMessage } from '../lib/apiErrors'
+import { rideHeadlineKey as headlineKey } from '../lib/rideStatus'
+import { hasAction, PASSENGER_MESSAGE_CODES, type RideResponse } from '../lib/rideTypes'
+import { useRideMessages } from '../lib/rideMessages'
+import { formatWeekdayDateTime } from '../lib/time'
+import { useRide } from '../lib/useRide'
+import { ContactButtons } from '../components/ContactButtons'
+import { LastUpdated } from '../components/LastUpdated'
+import { QuickMessages } from '../components/QuickMessages'
+import { RatingSheet } from '../components/RatingSheet'
+import { RideMessages } from '../components/RideMessages'
+import { RideTimeEdit } from '../components/RideTimeEdit'
+import { usePassengerRideActions } from '../components/rideActions'
+import { Button, Card, ConfirmDialog } from '../components/ui'
+import { useActiveRide } from '../shell/ActiveRide'
+import { useShell } from '../shell/ShellContext'
+import { bookPath } from '../shell/types'
+
+export function ActiveRidePage() {
+  const { id } = useParams()
+  return <ActiveRideScreen key={id} id={id} />
+}
+
+function ActiveRideScreen({ id }: { id: string | undefined }) {
+  const { t, locale } = useI18n()
+  const { token, user, onToast } = useShell()
+  const navigate = useNavigate()
+  const { refresh: refreshActive } = useActiveRide()
+  const { ride, lastUpdated, failed, gone, loading, refresh } = useRide(id, token)
+  const [rating, setRating] = useState(false)
+
+  if (!ride) {
+    return (
+      <div className="subpage-wrap stack">
+        <Card>
+          <p>{gone ? t('activeRide.gone') : loading ? t('common.loading') : t('activeRide.unreachable')}</p>
+          <Button variant="primary" onClick={() => navigate(bookPath(user.role))}>
+            {t('activeRide.toHome')}
+          </Button>
+        </Card>
+      </div>
+    )
+  }
+
+  const onChanged = async () => {
+    await refresh()
+    await refreshActive()
+  }
+
+  return (
+    <div className="subpage-wrap stack ride-screen">
+      <RideBody
+        ride={ride}
+        token={token}
+        userId={user.id}
+        locale={locale}
+        onToast={onToast}
+        onChanged={onChanged}
+        onRate={() => setRating(true)}
+        onHome={() => navigate(bookPath(user.role))}
+      />
+      <LastUpdated at={lastUpdated} failed={failed} />
+      <RatingSheet
+        open={rating}
+        onClose={() => setRating(false)}
+        onSubmit={async (stars, comment) => {
+          try {
+            await api(`/api/rides/${ride.id}/feedback`, {
+              method: 'POST',
+              token,
+              body: JSON.stringify({ stars, comment: comment || undefined })
+            })
+            onToast(t('rides.feedbackThanksToast'))
+          } catch (err) {
+            onToast(apiErrorMessage(err, t))
+            throw err
+          }
+        }}
+      />
+    </div>
+  )
+}
+
+function RideBody({
+  ride,
+  token,
+  userId,
+  locale,
+  onToast,
+  onChanged,
+  onRate,
+  onHome
+}: {
+  ride: RideResponse
+  token: string
+  userId: number
+  locale: string
+  onToast: (m: string) => void
+  onChanged: () => Promise<void>
+  onRate: () => void
+  onHome: () => void
+}) {
+  const { t } = useI18n()
+  const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
+  const messages = useRideMessages(ride, token)
+  const a = usePassengerRideActions({ ride, token, onToast, onChanged })
+  const driverFirst = ride.acceptedByDriverName?.split(' ')[0] || t('messages.driverName')
+  const cancelAction = hasAction(ride, 'CANCEL') || hasAction(ride, 'CANCEL_CONFIRM')
+  const needsConfirm = hasAction(ride, 'CANCEL_CONFIRM')
+  const finished = ride.status === 'COMPLETED' || ride.status === 'CANCELLED'
+  const hasDriver = !!ride.acceptedByDriverName && ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'PICKED_UP', 'COMPLETED'].includes(ride.status)
+
+  return (
+    <>
+      <Card tone="highlight" className="ride-hero">
+        <h1 className="ride-headline">{t(headlineKey(ride.status), { name: driverFirst })}</h1>
+        {ride.etaMinutes != null && ride.etaMinutes > 0 && !finished && <p className="ride-eta">{t('rides.eta', { min: ride.etaMinutes })}</p>}
+        <p className="ride-time">{formatWeekdayDateTime(ride.scheduledAt, dateLocale)}</p>
+        <p className="ride-route">
+          <strong>{ride.fromAddress}</strong>
+          <span className="ride-arrow" aria-label={t('rides.toWord')}>
+            {' → '}
+          </span>
+          <strong>{ride.toAddress}</strong>
+        </p>
+        {ride.status === 'NO_DRIVER' && <p>{t('rides.noDriverHint')}</p>}
+        {a.materialNotice && <p className="notice">{t('rides.editMaterial')}</p>}
+      </Card>
+
+      {hasDriver && (
+        <Card className="driver-card">
+          {ride.driverPhotoUrl ? (
+            <img className="driver-photo" src={ride.driverPhotoUrl} alt="" />
+          ) : (
+            <div className="driver-photo driver-photo-fallback" aria-hidden>
+              {driverFirst.slice(0, 1)}
+            </div>
+          )}
+          <div className="driver-card-info">
+            <strong>{ride.acceptedByDriverName}</strong>
+            {ride.driverVehicleNote && <div className="muted">{ride.driverVehicleNote}</div>}
+          </div>
+        </Card>
+      )}
+
+      {!finished && <ContactButtons phone={ride.driverPhone} name={driverFirst} />}
+
+      {ride.pickupNote && !finished && <p className="tiny">{t('pickupNote.show', { note: ride.pickupNote })}</p>}
+
+      {/* M7: the live map for the driver's position goes here. */}
+      <div className="live-map-slot" data-slot="live-map" aria-hidden />
+
+      <RideMessages messages={messages} isMine={(m) => m.senderId === userId} otherName={driverFirst} />
+      {hasAction(ride, 'MESSAGE') && (
+        <QuickMessages codes={PASSENGER_MESSAGE_CODES} disabled={a.busy} onSend={(c) => void a.sendMessage(c)} />
+      )}
+
+      <div className="ride-actions-col">
+        {hasAction(ride, 'KEEP_WAITING') && (
+          <Button variant="primary" size="lg" block disabled={a.busy} onClick={() => void a.keepWaiting()}>
+            {t('rides.keepWaiting')}
+          </Button>
+        )}
+        {hasAction(ride, 'EDIT') && (
+          <Button size="lg" block disabled={a.busy} onClick={() => a.setEditing(true)}>
+            {t('rides.editTime')}
+          </Button>
+        )}
+        {cancelAction && (
+          <Button variant="danger" size="lg" block disabled={a.busy} onClick={() => (needsConfirm ? a.setConfirmCancel(true) : void a.cancelRide(false))}>
+            {t('rides.cancel')}
+          </Button>
+        )}
+        {ride.status === 'COMPLETED' && (
+          <Button variant="primary" size="lg" block onClick={onRate}>
+            {t('rating.cta')}
+          </Button>
+        )}
+        {finished && (
+          <Button size="lg" block onClick={onHome}>
+            {t('activeRide.bookNew')}
+          </Button>
+        )}
+      </div>
+
+      <ConfirmDialog
+        open={a.confirmCancel}
+        danger
+        title={t('rides.cancelConfirmTitle')}
+        body={t('rides.cancelConfirmBody')}
+        confirmLabel={t('rides.cancelConfirmYes')}
+        cancelLabel={t('rides.cancelConfirmNo')}
+        busy={a.busy}
+        onCancel={() => a.setConfirmCancel(false)}
+        onConfirm={() => void a.cancelRide(true)}
+      />
+      {a.editing && (
+        <RideTimeEdit open ride={ride} busy={a.busy} onCancel={() => a.setEditing(false)} onSave={(patch) => void a.saveEdit(patch)} />
+      )}
+    </>
+  )
+}

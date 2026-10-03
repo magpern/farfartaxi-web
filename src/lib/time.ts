@@ -81,3 +81,20 @@ export function formatDateTime(iso: string, dateLocale: string): string {
     hour12: false
   })
 }
+
+/** "lördag 25 okt 14:30" in Stockholm time. */
+export function formatWeekdayDateTime(iso: string, dateLocale: string): string {
+  const d = new Date(iso)
+  const day = d.toLocaleDateString(dateLocale, {
+    timeZone: STOCKHOLM_TZ,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short'
+  })
+  return `${day} ${formatHm(iso)}`
+}
+
+/** "2026-10-25" for the Stockholm calendar day of an instant. */
+export function stockholmDayKey(date: Date | string): string {
+  return formatYmd(stockholmParts(typeof date === 'string' ? new Date(date) : date))
+}

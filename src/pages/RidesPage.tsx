@@ -1,0 +1,161 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { api } from '../api/client'
+import { useI18n } from '../i18n/context'
+import { apiErrorMessage } from '../lib/apiErrors'
+import { groupPassengerRides } from '../lib/rideGroups'
+import type { RideResponse } from '../lib/rideTypes'
+import { formatWeekdayDateTime } from '../lib/time'
+import { PassengerRideCard } from '../components/PassengerRideCard'
+import { RatingSheet } from '../components/RatingSheet'
+import { Button, Card, StatusPill } from '../components/ui'
+import { useShell } from '../shell/ShellContext'
+
+/** Compact row for a finished ride. */
+export function PastRideRow({
+  ride,
+  perspective,
+  onRate,
+  onDelete
+}: {
+  ride: RideResponse
+  perspective: 'passenger' | 'driver'
+  onRate?: (id: number) => void
+  onDelete?: (id: number) => void
+}) {
+  const { t, locale } = useI18n()
+  const dateLocale = locale === 'en' ? 'en-GB' : 'sv-SE'
+  return (
+    <article className="ride-item past-ride">
+      <p>
+        <StatusPill status={ride.status} perspective={perspective} />{' '}
+        <span className="muted">{formatWeekdayDateTime(ride.scheduledAt, dateLocale)}</span>
+      </p>
+      <p>
+        {ride.fromAddress} {t('rides.toWord')} {ride.toAddress}
+      </p>
+      <div className="row ride-actions">
+        {onRate && ride.status === 'COMPLETED' && <Button onClick={() => onRate(ride.id)}>{t('rating.cta')}</Button>}
+        {onDelete && ride.status === 'CANCELLED' && (
+          <Button variant="danger" onClick={() => onDelete(ride.id)}>
+            {t('rides.delete')}
+          </Button>
+        )}
+      </div>
+    </article>
+  )
+}
+
+export function Section({ title, empty, children, count }: { title: string; empty: string; count: number; children: React.ReactNode }) {
+  return (
+    <Card>
+      <h2 className="section-title">{title}</h2>
+      {count === 0 ? <p className="muted">{empty}</p> : children}
+    </Card>
+  )
+}
+
+export function RidesPage() {
+  const { t } = useI18n()
+  const { token, user, onToast } = useShell()
+  const navigate = useNavigate()
+  const [rides, setRides] = useState<RideResponse[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [rateId, setRateId] = useState<number | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const [up, hist] = await Promise.all([
+        api<RideResponse[]>('/api/rides/my?history=false', { token }),
+        api<RideResponse[]>('/api/rides/my?history=true', { token })
+      ])
+      setRides([...up, ...hist])
+      setFailed(false)
+    } catch {
+      setFailed(true) // keep the last known lists; the next poll retries
+    }
+  }, [token])
+
+  useEffect(() => {
+    void load()
+    const id = window.setInterval(() => void load(), 15000)
+    return () => window.clearInterval(id)
+  }, [load])
+
+  const groups = useMemo(() => groupPassengerRides(rides ?? []), [rides])
+
+  async function share(rideId: number) {
+    try {
+      const res = await api<{ url: string }>(`/api/rides/${rideId}/share`, { method: 'POST', token })
+      await navigator.clipboard.writeText(res.url)
+      onToast(t('rides.shareCopiedToast'))
+    } catch (err) {
+      onToast(apiErrorMessage(err, t))
+    }
+  }
+
+  async function deleteRide(rideId: number) {
+    try {
+      await api(`/api/rides/${rideId}`, { method: 'DELETE', token })
+      onToast(t('rides.deletedToast'))
+    } catch (err) {
+      onToast(apiErrorMessage(err, t))
+    } finally {
+      await load()
+    }
+  }
+
+  const card = (ride: RideResponse) => (
+    <PassengerRideCard
+      key={ride.id}
+      ride={ride}
+      token={token}
+      userId={user.id}
+      onToast={onToast}
+      onChanged={load}
+      onShare={share}
+      onDelete={deleteRide}
+      onOpen={(id) => navigate(`/app/resa/${id}`)}
+    />
+  )
+
+  return (
+    <div className="subpage-wrap stack">
+      <h1 className="page-title">{t('tabs.rides')}</h1>
+      {failed && <p className="notice">{t('lastUpdated.stale')}</p>}
+      {rides === null && !failed && <p className="muted">{t('common.loading')}</p>}
+      {rides !== null && (
+        <>
+          <Section title={t('rides.groupOngoing')} empty={t('rides.noOngoing')} count={groups.ongoing.length}>
+            {groups.ongoing.map(card)}
+          </Section>
+          <Section title={t('rides.groupUpcoming')} empty={t('rides.noUpcoming')} count={groups.upcoming.length}>
+            {groups.upcoming.map(card)}
+          </Section>
+          <Section title={t('rides.groupPast')} empty={t('rides.noHistory')} count={groups.past.length}>
+            {groups.past.map((r) => (
+              <PastRideRow key={r.id} ride={r} perspective="passenger" onRate={setRateId} onDelete={deleteRide} />
+            ))}
+          </Section>
+        </>
+      )}
+      <RatingSheet
+        open={rateId !== null}
+        onClose={() => setRateId(null)}
+        onSubmit={async (stars, comment) => {
+          try {
+            await api(`/api/rides/${rateId}/feedback`, {
+              method: 'POST',
+              token,
+              body: JSON.stringify({ stars, comment: comment || undefined })
+            })
+            onToast(t('rides.feedbackThanksToast'))
+          } catch (err) {
+            onToast(apiErrorMessage(err, t))
+            throw err
+          }
+        }}
+      />
+    </div>
+  )
+}

@@ -75,3 +75,13 @@ export function telHref(phone: string): string {
 
 export const PASSENGER_MESSAGE_CODES = ['PASSENGER_OUTSIDE', 'PASSENGER_TWO_MIN', 'PASSENGER_CALL_ME'] as const
 export const DRIVER_MESSAGE_CODES = ['DRIVER_HERE', 'DRIVER_TWO_MIN', 'DRIVER_LATE'] as const
+
+/** `sms:` link for the other party's phone (same number cleaning as {@link telHref}). */
+export function smsHref(phone: string): string {
+  return `sms:${phone.replace(/[^\d+]/g, '')}`
+}
+
+/** Body of `GET /api/rides/active` (204 when none). */
+export type ActiveRideResponse = { role: 'PASSENGER' | 'DRIVER'; ride: RideResponse }
+
+export const TERMINAL_STATUSES: readonly string[] = ['COMPLETED', 'CANCELLED']

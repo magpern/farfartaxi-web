@@ -25,3 +25,10 @@ export function rideStatusKey(status: string, perspective: StatusPerspective = '
 export function rideStatusLabel(t: T, status: string, perspective: StatusPerspective = 'passenger'): string {
   return t(rideStatusKey(status, perspective))
 }
+
+/** i18n key of the big status line for a ride, passenger perspective. */
+export function rideHeadlineKey(status: string): string {
+  const known = ['REQUESTED', 'NO_DRIVER', 'ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'PICKED_UP', 'COMPLETED', 'CANCELLED']
+  return `activeRide.headline.${known.includes(status) ? status : 'UNKNOWN'}`
+}
+
