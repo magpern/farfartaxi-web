@@ -5,6 +5,8 @@ const REFRESH_LOCK_KEY = 'farfartaxi-refresh-lock'
 const LOCK_TTL_MS = 8_000
 /** Refresh silently when the access token has less than this left. */
 export const REFRESH_AHEAD_MS = 5 * 60_000
+/** A hung refresh request is aborted after this long and treated as a (non-logout) error. */
+export const REFRESH_TIMEOUT_MS = 8_000
 const RACE_WAIT_MS = 500
 const CROSS_TAB_WAIT_MS = 1_500
 
@@ -60,8 +62,13 @@ export function tokenExpiresWithin(token: string, withinMs: number): boolean {
   return left == null || left <= withinMs
 }
 
-function storeRefreshed(token: string, user: Record<string, unknown> | undefined) {
+/** Bumped on logout so that any refresh already in flight cannot resurrect the session. */
+let sessionGeneration = 0
+
+/** Returns false (and writes nothing) if the session was cleared or logged out since `generation` was captured. */
+function storeRefreshed(token: string, user: Record<string, unknown> | undefined, generation: number): boolean {
   const prev = readStoredAuth()
+  if (generation !== sessionGeneration || !prev) return false
   const next = { ...(prev ?? {}), token, user: { ...(prev?.user ?? {}), ...(user ?? {}) } }
   try {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(next))
@@ -69,6 +76,7 @@ function storeRefreshed(token: string, user: Record<string, unknown> | undefined
     /* ignore */
   }
   emitAuthChange()
+  return true
 }
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
@@ -107,12 +115,29 @@ function newerStoredToken(baseline: string | undefined): boolean {
 }
 
 async function callRefresh(): Promise<{ status: 'ok' | 'invalid' | 'race' | 'error' }> {
+  const generation = sessionGeneration
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), REFRESH_TIMEOUT_MS)
+  try {
+    return await callRefreshInner(ctrl.signal, generation)
+  } catch {
+    return { status: 'error' }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function callRefreshInner(
+  signal: AbortSignal,
+  generation: number
+): Promise<{ status: 'ok' | 'invalid' | 'race' | 'error' }> {
   let res: Response
   try {
     res = await fetch(`${API_URL}/api/auth/refresh`, {
       method: 'POST',
       credentials: 'same-origin',
-      headers: { Accept: 'application/json' }
+      headers: { Accept: 'application/json' },
+      signal
     })
   } catch {
     return { status: 'error' }
@@ -121,8 +146,7 @@ async function callRefresh(): Promise<{ status: 'ok' | 'invalid' | 'race' | 'err
     try {
       const body = (await res.json()) as { token?: string; user?: Record<string, unknown> }
       if (!body.token) return { status: 'error' }
-      storeRefreshed(body.token, body.user)
-      return { status: 'ok' }
+      return { status: storeRefreshed(body.token, body.user, generation) ? 'ok' : 'error' }
     } catch {
       return { status: 'error' }
     }
@@ -209,6 +233,7 @@ export async function recoverFromUnauthorized(sentToken: string): Promise<string
 
 /** Revoke the refresh cookie server-side; network errors are ignored. */
 export async function logoutRemote(token?: string): Promise<void> {
+  sessionGeneration++
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 3_000)
   try {

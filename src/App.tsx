@@ -201,6 +201,7 @@ function App() {
 }
 
 function ProtectedApp() {
+  const { t } = useI18n()
   const [auth, setAuth] = useLocalAuth()
   // An expired/expiring stored access token is not a dead session: try the refresh cookie before rendering.
   const [booting, setBooting] = useState(() => {
@@ -255,7 +256,13 @@ function ProtectedApp() {
   if (!auth) {
     return <Navigate to="/login" replace />
   }
-  if (booting) return null
+  if (booting) {
+    return (
+      <main className="page page-center" role="status" aria-live="polite">
+        <p className="muted">{t('common.signingIn')}</p>
+      </main>
+    )
+  }
   if (auth.user.approved === false) {
     return (
       <PendingApproval

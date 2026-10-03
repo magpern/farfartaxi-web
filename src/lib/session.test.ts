@@ -4,7 +4,9 @@ import {
   AUTH_STORAGE_KEY,
   ensureFreshSession,
   registerSessionExpiredHandler,
-  logoutRemote
+  logoutRemote,
+  refreshSession,
+  REFRESH_TIMEOUT_MS
 } from './session'
 
 function jwt(expInSec: number): string {
@@ -166,5 +168,58 @@ describe('session refresh', () => {
     fetchMock.mockRejectedValue(new TypeError('offline'))
     await expect(logoutRemote('t')).resolves.toBeUndefined()
     expect(calls('/api/auth/logout')).toHaveLength(1)
+  })
+
+  it('hung refresh is aborted after the timeout: error (no logout) and inflight is cleared', async () => {
+    vi.useFakeTimers()
+    store(expired)
+    fetchMock.mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_res, rej) => {
+          init.signal?.addEventListener('abort', () => rej(new DOMException('aborted', 'AbortError')))
+        })
+    )
+    const p = refreshSession()
+    await vi.advanceTimersByTimeAsync(REFRESH_TIMEOUT_MS + 10)
+    await expect(p).resolves.toBe('error')
+    expect(onExpired).not.toHaveBeenCalled()
+    // a new refresh starts a fresh request (inflight was cleared)
+    fetchMock.mockImplementation(async () => json(200, { token: fresh, user }))
+    await expect(refreshSession()).resolves.toBe('ok')
+    expect(calls('/api/auth/refresh')).toHaveLength(2)
+  })
+
+  it('logout during an in-flight refresh discards the refreshed token', async () => {
+    store(expired)
+    let release!: () => void
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith('/api/auth/refresh')) {
+        await new Promise<void>((r) => (release = r))
+        return json(200, { token: fresh, user })
+      }
+      return new Response(null, { status: 204 })
+    })
+    const p = refreshSession()
+    await new Promise((r) => setTimeout(r, 0))
+    await logoutRemote(expired)
+    localStorage.removeItem(AUTH_STORAGE_KEY) // what the UI does after logout
+    release()
+    await expect(p).resolves.toBe('error')
+    expect(stored()).toBeUndefined()
+  })
+
+  it('refresh result is discarded when auth was cleared meanwhile (no resurrection)', async () => {
+    store(expired)
+    let release!: () => void
+    fetchMock.mockImplementation(async () => {
+      await new Promise<void>((r) => (release = r))
+      return json(200, { token: fresh, user })
+    })
+    const p = refreshSession()
+    await new Promise((r) => setTimeout(r, 0))
+    localStorage.removeItem(AUTH_STORAGE_KEY)
+    release()
+    await expect(p).resolves.toBe('error')
+    expect(localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
   })
 })

@@ -2,6 +2,7 @@
   "common": {
     "brand": "Farfartaxi",
     "ok": "OK",
+    "signingIn": "Signing in…",
     "documentTitle": "Farfartaxi"
   },
   "landing": {
