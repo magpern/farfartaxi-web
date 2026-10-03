@@ -6,7 +6,7 @@ import { useI18n } from '../i18n/context'
 import { PickupNoteField } from '../components/PickupNoteField'
 import { api } from '../api/client'
 import { API_URL } from '../lib/session'
-import { buildRideBookPayload, defaultDraft } from '../lib/bookingDraft'
+import { buildRideBookPayload, defaultDraft, isMyPositionText, UnresolvedPickupError } from '../lib/bookingDraft'
 import { haversine } from '../lib/geo'
 import type { RideResponse } from '../lib/rideTypes'
 import { createIdempotencyHolder } from '../lib/idempotency'
@@ -22,6 +22,10 @@ import { isDriverRole } from '../shell/types'
 import { BookingConfirmSheet, PassengerPicker } from '../components/BookingConfirmSheet'
 import { focusBookingField, type BookingEditField } from '../components/bookingFocus'
 import { useBookingUsers } from '../lib/useBookingUsers'
+
+const MAX_PICKUP_ACCURACY_M = 1000
+const isAccurateFix = (accuracy: number | undefined) =>
+  typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy < MAX_PICKUP_ACCURACY_M
 
 type Gps = { lat: number; lon: number; accuracy?: number }
 
@@ -75,6 +79,7 @@ export function BookingPage() {
   const activeFieldRef = useRef<'from' | 'to'>('from')
   const [activeField, setActiveField] = useState<'from' | 'to'>('from')
   const [gps, setGps] = useState<Gps | null>(null)
+  const [resolving, setResolving] = useState(false)
   const [stop, setStop] = useState<NearestStop | null>(null)
 
   activeFieldRef.current = activeField
@@ -122,23 +127,32 @@ export function BookingPage() {
       const ac = new AbortController()
       mapClickReverseAbortRef.current = ac
       if (field === 'from') {
-        setDraft((d) => ({ ...d, fromLat: latlng.lat, fromLon: latlng.lng }))
+        setDraft((d) => ({ ...d, fromIsGps: false, fromLat: latlng.lat, fromLon: latlng.lng }))
       } else {
         setDraft((d) => ({ ...d, toLat: latlng.lat, toLon: latlng.lng }))
       }
       void (async () => {
-        let address: string
+        let address: string | null = null
         try {
-          const place = await reversePlace(tokenRef.current, latlng.lat, latlng.lng, ac.signal)
-          address = place?.formattedAddress || tRef.current('placeSearch.selectedPlace')
+          address = (await reversePlace(tokenRef.current, latlng.lat, latlng.lng, ac.signal))?.formattedAddress || null
         } catch (err) {
           if (err instanceof Error && err.name === 'AbortError') return
-          // 429 / network / anything else: keep the tapped coordinates, just label them generically
-          address = tRef.current('placeSearch.selectedPlace')
+          // 204 / 429 / network: fall through to the nearest-stop / coordinate labels
+        }
+        if (!address) {
+          try {
+            const near = await nearestStop(tokenRef.current, latlng.lat, latlng.lng, ac.signal)
+            if (near) address = tRef.current('placeSearch.nearStop', { name: near.name })
+          } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') return
+          }
+        }
+        if (!address) {
+          address = tRef.current('placeSearch.selectedPlaceCoords', { lat: latlng.lat.toFixed(5), lon: latlng.lng.toFixed(5) })
         }
         if (ac.signal.aborted || field !== activeFieldRef.current) return
         if (field === 'from') {
-          setDraft((d) => ({ ...d, fromAddress: address, fromLat: latlng.lat, fromLon: latlng.lng }))
+          setDraft((d) => ({ ...d, fromAddress: address, fromIsGps: false, fromLat: latlng.lat, fromLon: latlng.lng }))
         } else {
           setDraft((d) => ({ ...d, toAddress: address, toLat: latlng.lat, toLon: latlng.lng }))
         }
@@ -169,6 +183,8 @@ export function BookingPage() {
           setGps({ lat: latitude, lon: longitude, accuracy: Number.isFinite(accuracy) ? accuracy : undefined })
           const m = mapRef.current
           if (!m || !bothAddressesEmpty) return
+          // A coarse fix (cell/IP based) is no pickup: only trust it below 1 km.
+          if (!isAccurateFix(accuracy)) return
           const cur = draftRef.current
           if (cur.fromAddress.trim() || cur.toAddress.trim()) return
           programmaticCameraRef.current = true
@@ -180,7 +196,9 @@ export function BookingPage() {
           }, 80)
           // Default pickup: where the phone is.
           setDraft((d) =>
-            d.fromAddress.trim() ? d : { ...d, fromAddress: tRef.current('placeSearch.myPosition'), fromLat: latitude, fromLon: longitude }
+            d.fromAddress.trim()
+              ? d
+              : { ...d, fromAddress: tRef.current('placeSearch.myPosition'), fromIsGps: true, fromLat: latitude, fromLon: longitude }
           )
         },
         () => {
@@ -335,8 +353,9 @@ export function BookingPage() {
 
   const gpsLat = gps?.lat
   const gpsLon = gps?.lon
+  const gpsAccurate = isAccurateFix(gps?.accuracy)
   useEffect(() => {
-    if (gpsLat == null || gpsLon == null) return
+    if (gpsLat == null || gpsLon == null || !gpsAccurate) return
     const ac = new AbortController()
     nearestStop(tokenRef.current, gpsLat, gpsLon, ac.signal)
       .then((r) => {
@@ -346,7 +365,7 @@ export function BookingPage() {
         /* the hint is optional */
       })
     return () => ac.abort()
-  }, [gpsLat, gpsLon])
+  }, [gpsLat, gpsLon, gpsAccurate])
 
   function recenterMapOnField(field: 'from' | 'to') {
     const m = mapRef.current
@@ -385,7 +404,7 @@ export function BookingPage() {
     }, 80)
     const label = item.formattedAddress || item.name
     if (field === 'from') {
-      setDraft((d) => ({ ...d, fromAddress: label, fromLat: lat, fromLon: lon }))
+      setDraft((d) => ({ ...d, fromAddress: label, fromIsGps: false, fromLat: lat, fromLon: lon }))
     } else {
       setDraft((d) => ({ ...d, toAddress: label, toLat: lat, toLon: lon }))
     }
@@ -395,7 +414,7 @@ export function BookingPage() {
     mapClickReverseAbortRef.current?.abort()
     // ✕ resets the coordinates too, so a stale pin/route never survives an emptied field
     if (field === 'from') {
-      setDraft((d) => ({ ...d, fromAddress: '', fromLat: defaultDraft.fromLat, fromLon: defaultDraft.fromLon }))
+      setDraft((d) => ({ ...d, fromAddress: '', fromIsGps: false, fromLat: defaultDraft.fromLat, fromLon: defaultDraft.fromLon }))
     } else {
       setDraft((d) => ({ ...d, toAddress: '', toLat: defaultDraft.toLat, toLon: defaultDraft.toLon }))
     }
@@ -409,7 +428,7 @@ export function BookingPage() {
         kind: 'STOP',
         name: s.name,
         area: s.area,
-        formattedAddress: s.area ? `${s.name} — ${s.area} (hållplats)` : s.name,
+        formattedAddress: s.area ? `${s.name} — ${s.area} (hållplats)` : `${s.name} (hållplats)`,
         lat: s.lat,
         lon: s.lon,
         distanceKm: s.distanceM / 1000
@@ -420,7 +439,15 @@ export function BookingPage() {
 
   async function submitAkaNu() {
     await runBooking(async () => {
-      const payload = buildRideBookPayload(draft, 'NOW')
+      let payload: Record<string, unknown>
+      try {
+        payload = buildRideBookPayload(draft, 'NOW')
+      } catch (err) {
+        if (!(err instanceof UnresolvedPickupError)) throw err
+        setSheetOpen(false)
+        onToast(t('booking.pickupUnresolved'))
+        return
+      }
       const key = idempotency.current.keyFor(payload)
       try {
         const ride = await api<RideResponse>('/api/rides', {
@@ -455,7 +482,14 @@ export function BookingPage() {
    */
   async function resolveMyPosition(): Promise<boolean> {
     const d = draftRef.current
-    if (d.fromAddress !== t('placeSearch.myPosition')) return true
+    if (!d.fromIsGps) {
+      if (isMyPositionText(d.fromAddress)) {
+        // The placeholder text without a GPS fix behind it (typed by hand): never send it.
+        onToast(t('booking.pickupUnresolved'))
+        return false
+      }
+      return true
+    }
     const { fromLat: lat, fromLon: lon } = d
     let label: string | null
     try {
@@ -466,18 +500,28 @@ export function BookingPage() {
     if (!label && stop) label = t('placeSearch.nearStop', { name: stop.name })
     if (!label) label = t('placeSearch.gpsFallback', { lat: lat.toFixed(5), lon: lon.toFixed(5) })
     const resolved = label
-    setDraft((cur) => (cur.fromAddress === t('placeSearch.myPosition') ? { ...cur, fromAddress: resolved } : cur))
-    return true
+    // Only if the user has not changed the pickup meanwhile (typing/choosing clears the GPS flag).
+    setDraft((cur) => (cur.fromIsGps ? { ...cur, fromAddress: resolved, fromIsGps: false } : cur))
+    return draftRef.current.fromIsGps || !isMyPositionText(draftRef.current.fromAddress)
+  }
+
+  async function resolveThen(next: () => void) {
+    setResolving(true)
+    try {
+      if (await resolveMyPosition()) next()
+    } finally {
+      setResolving(false)
+    }
   }
 
   function goForboka() {
     if (!validateDraft()) return
-    void resolveMyPosition().then(() => navigate('/app/forboka'))
+    void resolveThen(() => navigate('/app/forboka'))
   }
 
   function bookAkaNu() {
     if (!validateDraft()) return
-    void resolveMyPosition().then(() => setSheetOpen(true))
+    void resolveThen(() => setSheetOpen(true))
   }
 
   function editFromSheet(field: BookingEditField) {
@@ -510,7 +554,7 @@ export function BookingPage() {
             <PlaceSearchInput
               token={token}
               fieldName="from"
-              value={draft.fromAddress}
+              value={draft.fromIsGps ? t('placeSearch.myPosition') : draft.fromAddress}
               placeholder={t('booking.pickupPlaceholder')}
               ariaLabel={t('booking.pickupAria')}
               clearLabel={t('booking.clearPickup')}
@@ -521,12 +565,12 @@ export function BookingPage() {
               }}
               onChange={(v) => {
                 setActiveField('from')
-                setDraft((d) => ({ ...d, fromAddress: v }))
+                setDraft((d) => ({ ...d, fromAddress: v, fromIsGps: false }))
               }}
               onSelect={(p) => applySearchResult(p, 'from')}
               onClear={() => clearField('from')}
             />
-            {stop && gps && draft.fromAddress === t('placeSearch.myPosition') && (
+            {stop && gps && gpsAccurate && draft.fromIsGps && (
               <p className="pickup-hint">
                 <span>
                   {t('placeSearch.hereStop', { name: stop.name, dist: formatDistanceM(stop.distanceM) })}
@@ -571,11 +615,11 @@ export function BookingPage() {
           onChange={(v) => setDraft((d) => ({ ...d, pickupNote: v }))}
         />
         <div className="booking-actions">
-          <button type="button" className="btn btn-outline" onClick={goForboka} disabled={booking}>
-            {t('booking.forboka')}
+          <button type="button" className="btn btn-outline" onClick={goForboka} disabled={booking || resolving}>
+            {resolving ? t('booking.resolvingAddress') : t('booking.forboka')}
           </button>
-          <button type="button" className="btn btn-aka-nu" onClick={bookAkaNu} disabled={booking} aria-busy={booking}>
-            {booking ? t('booking.submitting') : t('booking.akaNu')}
+          <button type="button" className="btn btn-aka-nu" onClick={bookAkaNu} disabled={booking || resolving} aria-busy={booking || resolving}>
+            {resolving ? t('booking.resolvingAddress') : booking ? t('booking.submitting') : t('booking.akaNu')}
           </button>
         </div>
       </div>

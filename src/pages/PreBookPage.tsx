@@ -4,7 +4,7 @@ import { Clock24hTimePicker } from '../Clock24hTimePicker'
 import { useI18n } from '../i18n/context'
 import { PickupNoteField } from '../components/PickupNoteField'
 import { api } from '../api/client'
-import { buildRideBookPayload } from '../lib/bookingDraft'
+import { buildRideBookPayload, UnresolvedPickupError } from '../lib/bookingDraft'
 import type { RideResponse } from '../lib/rideTypes'
 import { createIdempotencyHolder } from '../lib/idempotency'
 import { stockholmLocalToInstant, stockholmParts } from '../lib/time'
@@ -93,7 +93,16 @@ export function PreBookPage() {
     if (!resolvedTime.ok) return
     const iso = resolvedTime.iso
     await runBooking(async () => {
-      const payload = buildRideBookPayload(draft, 'SCHEDULED', iso)
+      let payload: Record<string, unknown>
+      try {
+        payload = buildRideBookPayload(draft, 'SCHEDULED', iso)
+      } catch (err) {
+        if (!(err instanceof UnresolvedPickupError)) throw err
+        setSheetOpen(false)
+        onToast(t('booking.pickupUnresolved'))
+        navigate(bookPath(currentUser.role))
+        return
+      }
       try {
         const ride = await api<RideResponse>('/api/rides', {
           method: 'POST',

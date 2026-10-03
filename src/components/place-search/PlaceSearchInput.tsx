@@ -84,6 +84,7 @@ export function PlaceSearchInput({
           aria-autocomplete="list"
           aria-activedescendant={showList && activeIndex >= 0 ? optionId(listId, activeIndex) : undefined}
           autoComplete="off"
+          maxLength={100}
           data-booking-field={fieldName}
           value={value}
           placeholder={placeholder}

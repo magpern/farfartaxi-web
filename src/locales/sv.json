@@ -72,7 +72,9 @@
     "forPassenger": "Passagerare",
     "ambiguousTime": "Klockan {{time}} inträffar två gånger den här natten. Vi använder den första.",
     "nonexistentTime": "Klockan {{time}} finns inte den här dagen (sommartid börjar). Välj en annan tid.",
-    "submitting": "Bokar…"
+    "submitting": "Bokar…",
+    "resolvingAddress": "Hämtar adress…",
+    "pickupUnresolved": "Vi kunde inte avgöra din startadress. Sök efter en adress eller välj på kartan."
   },
   "prebook": {
     "back": "Tillbaka",
@@ -464,6 +466,7 @@
     "showMore": "Visa fler",
     "myPosition": "📍 Min position",
     "selectedPlace": "Vald plats",
+    "selectedPlaceCoords": "Vald plats ({{lat}}, {{lon}})",
     "hereStop": "📍 Här ({{name}}, {{dist}})",
     "useStop": "Använd hållplatsen som start",
     "nearStop": "Nära {{name}}",

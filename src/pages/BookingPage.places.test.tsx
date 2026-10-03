@@ -5,6 +5,7 @@ import { defaultDraft, type BookingDraft } from '../lib/bookingDraft'
 import { BookingDraftContext } from '../shell/BookingDraftContext'
 import { calls, json, mockFetch, noContent } from '../test/fetchMock'
 import { renderApp } from '../test/render'
+import { useI18n } from '../i18n/context'
 
 type ClickHandler = (e: { latlng: { lat: number; lng: number } }) => void
 const leaflet = vi.hoisted(() => ({ click: null as unknown }))
@@ -26,11 +27,16 @@ vi.mock('../shell/ActiveRide', () => ({ useActiveRide: () => ({ active: null, lo
 import { BookingPage } from './BookingPage'
 
 let draftNow: BookingDraft
+function LangSwitch() {
+  const { setLocale } = useI18n()
+  return <button type="button" onClick={() => setLocale('en')}>to-en</button>
+}
 function Wrapper() {
   const [draft, setDraft] = useState<BookingDraft>(defaultDraft)
   draftNow = draft
   return (
     <BookingDraftContext.Provider value={{ draft, setDraft, clearBookingDraft: () => {} }}>
+      <LangSwitch />
       <BookingPage />
     </BookingDraftContext.Provider>
   )
@@ -135,12 +141,110 @@ describe('BookingPage places', () => {
   it.each([
     ['204', () => noContent()],
     ['429', () => json({ error: 'Slow down' }, 429)]
-  ])('map tap reverse %s: keeps the coordinates and labels them "Vald plats"', async (_n, res) => {
+  ])('map tap reverse %s and no stop nearby: labels with the coordinates, never bare "Vald plats"', async (_n, res) => {
     stubGeolocation('denied')
-    mockFetch((u) => (u.pathname === '/api/places/reverse' ? res() : undefined))
+    mockFetch(
+      (u) => (u.pathname === '/api/places/reverse' ? res() : undefined),
+      (u) => (u.pathname === '/api/places/nearest-stop' ? noContent() : undefined)
+    )
+    renderApp(<Wrapper />)
+    await tap(59.4, 17.8)
+    expect([draftNow.fromAddress, draftNow.fromLat, draftNow.fromLon]).toEqual(['Vald plats (59.40000, 17.80000)', 59.4, 17.8])
+  })
+
+  it('map tap reverse 204 with a stop nearby: "Nära <stop>"', async () => {
+    stubGeolocation('denied')
+    const f = mockFetch(
+      (u) => (u.pathname === '/api/places/reverse' ? noContent() : undefined),
+      (u) => (u.pathname === '/api/places/nearest-stop' ? json(STOP) : undefined)
+    )
     renderApp(<Wrapper />)
     await tap(59.31, 18.01)
-    expect([draftNow.fromAddress, draftNow.fromLat, draftNow.fromLon]).toEqual(['Vald plats', 59.31, 18.01])
+    expect(calls(f, '/api/places/nearest-stop')[0].searchParams.get('lat')).toBe('59.31')
+    expect(draftNow.fromAddress).toBe('Nära Kallhälls station')
+  })
+
+  it('stop without area: "<name> (hållplats)"', async () => {
+    stubGeolocation('ok')
+    mockFetch((u) => (u.pathname === '/api/places/nearest-stop' ? json({ ...STOP, area: null }) : undefined))
+    renderApp(<Wrapper />)
+    await flush()
+    fireEvent.click(screen.getByRole('button', { name: 'Använd hållplatsen som start' }))
+    expect(screen.getByLabelText('Startadress')).toHaveValue('Kallhälls station (hållplats)')
+  })
+
+  it('inaccurate GPS fix (>= 1000 m): no default pickup and no nearest-stop hint', async () => {
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      geolocation: { getCurrentPosition: (ok: (p: unknown) => void) => ok({ coords: { latitude: 59.4, longitude: 17.8, accuracy: 1000 } }) }
+    })
+    const f = mockFetch((u) => (u.pathname === '/api/places/nearest-stop' ? json(STOP) : undefined))
+    renderApp(<Wrapper />)
+    await flush()
+    expect(screen.getByLabelText('Startadress')).toHaveValue('')
+    expect(calls(f, '/api/places/nearest-stop')).toHaveLength(0)
+    expect(screen.queryByText(/Här \(/)).not.toBeInTheDocument()
+  })
+
+  it('pickup and destination inputs are capped at 100 characters', () => {
+    stubGeolocation('denied')
+    renderApp(<Wrapper />)
+    expect(screen.getByLabelText('Startadress')).toHaveAttribute('maxlength', '100')
+    expect(screen.getByLabelText('Destination')).toHaveAttribute('maxlength', '100')
+  })
+
+  it('"Min position" is language independent: the flag, not the text, is resolved', async () => {
+    stubGeolocation('ok')
+    const f = mockFetch(
+      (u) => (u.pathname === '/api/places/nearest-stop' ? noContent() : undefined),
+      (u) => (u.pathname === '/api/places/reverse' ? json({ provider: 'NOMINATIM', providerPlaceId: null, kind: 'ADDRESS', name: 'x', area: null, formattedAddress: 'Sveavägen 12, Stockholm', lat: 59.4, lon: 17.8, distanceKm: null }) : undefined),
+      (u, init) => (u.pathname === '/api/rides' && init?.method === 'POST' ? json({ id: 5, passengerId: 1 }) : undefined)
+    )
+    renderApp(<Wrapper />)
+    await flush()
+    expect(draftNow.fromIsGps).toBe(true)
+    // switch language after the default was set: the stored text is Swedish, the UI is English
+    fireEvent.click(screen.getByRole('button', { name: 'to-en' }))
+    expect(screen.getByLabelText('Pickup address')).toHaveValue('📍 My position')
+    fireEvent.change(screen.getByLabelText('Destination'), { target: { value: 'School' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Go now' }))
+    await flush()
+    fireEvent.click(screen.getByRole('button', { name: /^Yes/ }))
+    await flush()
+    const post = f.mock.calls.find((c) => String(c[0]).includes('/api/rides') && c[1]?.method === 'POST')
+    const from = JSON.parse(String(post?.[1]?.body)).fromAddress
+    expect(from).toBe('Sveavägen 12, Stockholm')
+  })
+
+  it('a hand-typed "Min position" without a GPS fix is blocked, nothing is sent', async () => {
+    stubGeolocation('denied')
+    const f = mockFetch()
+    renderApp(<Wrapper />)
+    fireEvent.change(screen.getByLabelText('Startadress'), { target: { value: '📍 Min position' } })
+    fireEvent.change(screen.getByLabelText('Destination'), { target: { value: 'Skolan' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Åka nu' }))
+    await flush()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(calls(f, '/api/rides')).toHaveLength(0)
+  })
+
+  it('buttons show "Hämtar adress…" and are disabled while the pickup label is resolved', async () => {
+    stubGeolocation('ok')
+    let release: (r: Response) => void = () => {}
+    mockFetch(
+      (u) => (u.pathname === '/api/places/nearest-stop' ? noContent() : undefined),
+      (u) => (u.pathname === '/api/places/reverse' ? new Promise<Response>((r) => { release = r }) as unknown as Response : undefined)
+    )
+    renderApp(<Wrapper />)
+    await flush()
+    fireEvent.change(screen.getByLabelText('Destination'), { target: { value: 'Skolan' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Åka nu' }))
+    await flush()
+    const busy = screen.getAllByRole('button', { name: 'Hämtar adress…' })
+    expect(busy).toHaveLength(2)
+    busy.forEach((b) => expect(b).toBeDisabled())
+    await act(async () => { release(noContent()); await vi.advanceTimersByTimeAsync(20) })
+    expect(screen.queryByRole('button', { name: 'Hämtar adress…' })).not.toBeInTheDocument()
   })
 
   describe('"Min position" is resolved before booking', () => {

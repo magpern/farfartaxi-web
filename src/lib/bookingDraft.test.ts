@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   BOOKING_DRAFT_STORAGE_KEY,
   buildRideBookPayload,
+  UnresolvedPickupError,
   defaultDraft,
   readBookingDraftFromStorage,
   writeBookingDraftToStorage
@@ -57,5 +58,12 @@ describe('booking draft storage', () => {
     expect(readBookingDraftFromStorage()).toBeNull()
     sessionStorage.setItem(BOOKING_DRAFT_STORAGE_KEY, JSON.stringify({ fromLat: 1, fromLon: 1, toLat: 1, toLon: 1 }))
     expect(readBookingDraftFromStorage()).toBeNull()
+  })
+
+  it.each(['📍 Min position', '📍 My position', ' 📍 My position '])('refuses a pickup equal to the placeholder %j', (t) => {
+    expect(() => buildRideBookPayload({ ...defaultDraft, fromAddress: t }, 'NOW')).toThrow(UnresolvedPickupError)
+  })
+  it('refuses an unresolved GPS pickup', () => {
+    expect(() => buildRideBookPayload({ ...defaultDraft, fromAddress: 'x', fromIsGps: true }, 'NOW')).toThrow(UnresolvedPickupError)
   })
 })

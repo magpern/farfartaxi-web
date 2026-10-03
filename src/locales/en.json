@@ -72,7 +72,9 @@
     "forPassenger": "Passenger",
     "ambiguousTime": "{{time}} happens twice that night. We use the first one.",
     "nonexistentTime": "{{time}} does not exist that day (daylight saving starts). Pick another time.",
-    "submitting": "Booking…"
+    "submitting": "Booking…",
+    "resolvingAddress": "Getting address…",
+    "pickupUnresolved": "We could not work out your pickup address. Search for an address or pick it on the map."
   },
   "prebook": {
     "back": "Back",
@@ -464,6 +466,7 @@
     "showMore": "Show more",
     "myPosition": "📍 My position",
     "selectedPlace": "Selected place",
+    "selectedPlaceCoords": "Selected place ({{lat}}, {{lon}})",
     "hereStop": "📍 Here ({{name}}, {{dist}})",
     "useStop": "Use the stop as pickup",
     "nearStop": "Near {{name}}",
