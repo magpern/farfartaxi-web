@@ -1575,3 +1575,80 @@ a.link-back {
   cursor: pointer;
   font-weight: 600;
 }
+
+/* Place search (M3) */
+.place-search {
+  position: relative;
+}
+.place-results {
+  margin-top: 0.5rem;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+.place-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid #334155;
+  border-radius: 8px;
+}
+.place-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 52px;
+  padding: 0.5rem 0.85rem;
+  cursor: pointer;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+}
+.place-row:last-child {
+  border-bottom: none;
+}
+.place-row:hover,
+.place-row-active {
+  background: #1e293b;
+}
+.place-icon {
+  font-size: 1.25rem;
+  flex: none;
+}
+.place-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.place-name {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.place-area {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+.place-dist {
+  flex: none;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+.place-note {
+  margin: 0.5rem 0;
+}
+.place-more {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 0.5rem;
+}
+.pickup-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.25rem 0 0;
+}
+.pickup-hint .btn {
+  min-height: 48px;
+}

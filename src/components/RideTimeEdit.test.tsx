@@ -8,7 +8,7 @@ function setup(scheduledAt: string) {
   const onSave = vi.fn()
   render(
     <I18nProvider>
-      <RideTimeEdit open ride={{ scheduledAt, toAddress: 'B', pickupNote: null }} onSave={onSave} onCancel={() => {}} />
+      <RideTimeEdit open token="t" ride={{ scheduledAt, toAddress: 'B', pickupNote: null }} onSave={onSave} onCancel={() => {}} />
     </I18nProvider>
   )
   return onSave

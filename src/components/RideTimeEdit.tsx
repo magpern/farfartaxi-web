@@ -19,12 +19,13 @@ type Props = {
   open: boolean
   ride: Pick<RideResponse, 'scheduledAt' | 'toAddress' | 'pickupNote'>
   busy?: boolean
+  token: string
   onSave: (patch: RidePatch) => void
   onCancel: () => void
 }
 
 /** Edits time (Europe/Stockholm, rejects non-existent / flags ambiguous times), destination and pickup note. Sends only what changed. */
-export function RideTimeEdit({ open, ride, busy, onSave, onCancel }: Props) {
+export function RideTimeEdit({ open, ride, busy, token, onSave, onCancel }: Props) {
   const initialIso = ride.scheduledAt
   const { t } = useI18n()
   const init = useMemo(() => stockholmParts(new Date(initialIso)), [initialIso])
@@ -98,7 +99,7 @@ export function RideTimeEdit({ open, ride, busy, onSave, onCancel }: Props) {
         <p>
           <strong>{dest ? dest.address : ride.toAddress}</strong>
         </p>
-        <AddressSearch onPick={setDest} />
+        <AddressSearch token={token} onPick={setDest} onClear={() => setDest(null)} />
         {dest && (
           <button type="button" className="btn btn-touch" onClick={() => setDest(null)}>
             {t('rides.editClearDestination')}

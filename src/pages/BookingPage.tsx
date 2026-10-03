@@ -6,13 +6,15 @@ import { useI18n } from '../i18n/context'
 import { PickupNoteField } from '../components/PickupNoteField'
 import { api } from '../api/client'
 import { API_URL } from '../lib/session'
-import { buildRideBookPayload } from '../lib/bookingDraft'
+import { buildRideBookPayload, defaultDraft, isMyPositionText, UnresolvedPickupError } from '../lib/bookingDraft'
 import { haversine } from '../lib/geo'
 import type { RideResponse } from '../lib/rideTypes'
 import { createIdempotencyHolder } from '../lib/idempotency'
 import { useBusy } from '../lib/useBusy'
 import { bookingApiErrorMessage } from '../lib/bookingErrors'
-import { dedupeNominatimResults, formatNominatimAddress, type NominatimResult } from '../lib/nominatim'
+import { nearestStop, reversePlace, type NearestStop, type PlaceResult } from '../api/places'
+import { PlaceSearchInput } from '../components/place-search/PlaceSearchInput'
+import { formatDistanceM } from '../components/place-search/format'
 import { useBookingDraft } from '../shell/BookingDraftContext'
 import { useShell } from '../shell/ShellContext'
 import { useActiveRide } from '../shell/ActiveRide'
@@ -21,8 +23,11 @@ import { BookingConfirmSheet, PassengerPicker } from '../components/BookingConfi
 import { focusBookingField, type BookingEditField } from '../components/bookingFocus'
 import { useBookingUsers } from '../lib/useBookingUsers'
 
-/** Nominatim reverse zoom: keep fixed for stable labels. */
-const REVERSE_GEOCODE_DETAIL_ZOOM = 18
+const MAX_PICKUP_ACCURACY_M = 1000
+const isAccurateFix = (accuracy: number | undefined) =>
+  typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy < MAX_PICKUP_ACCURACY_M
+
+type Gps = { lat: number; lon: number; accuracy?: number }
 
 /** OSRM route response (subset; geometries=geojson). */
 type OsrmRouteResponse = {
@@ -43,6 +48,10 @@ export function BookingPage() {
   const { token, user: currentUser, onToast } = useShell()
   const { refresh: refreshActive } = useActiveRide()
   const { t } = useI18n()
+  const tokenRef = useRef(token)
+  tokenRef.current = token
+  const tRef = useRef(t)
+  tRef.current = t
   const navigate = useNavigate()
   const { draft, setDraft, clearBookingDraft } = useBookingDraft()
   const isDriver = isDriverRole(currentUser.role)
@@ -69,8 +78,9 @@ export function BookingPage() {
   const mapNode = useRef<HTMLDivElement | null>(null)
   const activeFieldRef = useRef<'from' | 'to'>('from')
   const [activeField, setActiveField] = useState<'from' | 'to'>('from')
-  const [query, setQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<NominatimResult[]>([])
+  const [gps, setGps] = useState<Gps | null>(null)
+  const [resolving, setResolving] = useState(false)
+  const [stop, setStop] = useState<NearestStop | null>(null)
 
   activeFieldRef.current = activeField
 
@@ -117,34 +127,34 @@ export function BookingPage() {
       const ac = new AbortController()
       mapClickReverseAbortRef.current = ac
       if (field === 'from') {
-        setDraft((d) => ({ ...d, fromLat: latlng.lat, fromLon: latlng.lng }))
+        setDraft((d) => ({ ...d, fromIsGps: false, fromLat: latlng.lat, fromLon: latlng.lng }))
       } else {
         setDraft((d) => ({ ...d, toLat: latlng.lat, toLon: latlng.lng }))
       }
       void (async () => {
+        let address: string | null = null
         try {
-          const url =
-            `${API_URL}/api/public/geocode/reverse?lat=${latlng.lat}&lon=${latlng.lng}` +
-            `&zoom=${REVERSE_GEOCODE_DETAIL_ZOOM}`
-          const res = await fetch(url, {
-            signal: ac.signal,
-            headers: { Accept: 'application/json' }
-          })
-          if (!res.ok) return
-          const data = (await res.json()) as NominatimResult
-          const address =
-            formatNominatimAddress(data) ||
-            data.display_name ||
-            `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`
-          if (field !== activeFieldRef.current) return
-          if (field === 'from') {
-            setDraft((d) => ({ ...d, fromAddress: address, fromLat: latlng.lat, fromLon: latlng.lng }))
-          } else {
-            setDraft((d) => ({ ...d, toAddress: address, toLat: latlng.lat, toLon: latlng.lng }))
-          }
+          address = (await reversePlace(tokenRef.current, latlng.lat, latlng.lng, ac.signal))?.formattedAddress || null
         } catch (err) {
-          const name = err instanceof Error ? err.name : ''
-          if (name === 'AbortError') return
+          if (err instanceof Error && err.name === 'AbortError') return
+          // 204 / 429 / network: fall through to the nearest-stop / coordinate labels
+        }
+        if (!address) {
+          try {
+            const near = await nearestStop(tokenRef.current, latlng.lat, latlng.lng, ac.signal)
+            if (near) address = tRef.current('placeSearch.nearStop', { name: near.name })
+          } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') return
+          }
+        }
+        if (!address) {
+          address = tRef.current('placeSearch.selectedPlaceCoords', { lat: latlng.lat.toFixed(5), lon: latlng.lng.toFixed(5) })
+        }
+        if (ac.signal.aborted || field !== activeFieldRef.current) return
+        if (field === 'from') {
+          setDraft((d) => ({ ...d, fromAddress: address, fromIsGps: false, fromLat: latlng.lat, fromLon: latlng.lng }))
+        } else {
+          setDraft((d) => ({ ...d, toAddress: address, toLat: latlng.lat, toLon: latlng.lng }))
         }
       })()
     })
@@ -165,22 +175,34 @@ export function BookingPage() {
 
     mapRef.current = map
 
-    if (bothAddressesEmpty && typeof navigator !== 'undefined' && navigator.geolocation) {
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const m = mapRef.current
-          if (!m) return
-          const { latitude, longitude } = pos.coords
+          const { latitude, longitude, accuracy } = pos.coords
           if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return
+          setGps({ lat: latitude, lon: longitude, accuracy: Number.isFinite(accuracy) ? accuracy : undefined })
+          const m = mapRef.current
+          if (!m || !bothAddressesEmpty) return
+          // A coarse fix (cell/IP based) is no pickup: only trust it below 1 km.
+          if (!isAccurateFix(accuracy)) return
+          const cur = draftRef.current
+          if (cur.fromAddress.trim() || cur.toAddress.trim()) return
           programmaticCameraRef.current = true
           skipReverseOnMoveEndRef.current = true
           m.setView([latitude, longitude], 17)
+          lastStableMapCenterRef.current = { lat: latitude, lng: longitude }
           window.setTimeout(() => {
             programmaticCameraRef.current = false
           }, 80)
+          // Default pickup: where the phone is.
+          setDraft((d) =>
+            d.fromAddress.trim()
+              ? d
+              : { ...d, fromAddress: tRef.current('placeSearch.myPosition'), fromIsGps: true, fromLat: latitude, fromLon: longitude }
+          )
         },
         () => {
-          /* keep default map center; permission denied or timeout */
+          /* keep default map center; permission denied or timeout: search still works without a context */
         },
         { enableHighAccuracy: false, maximumAge: 60_000, timeout: 12_000 }
       )
@@ -329,29 +351,21 @@ export function BookingPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- legacy: only re-run when draft coordinates/addresses change, not on other draft fields (pre-existing)
   }, [draft.fromAddress, draft.toAddress, draft.fromLat, draft.fromLon, draft.toLat, draft.toLon])
 
+  const gpsLat = gps?.lat
+  const gpsLon = gps?.lon
+  const gpsAccurate = isAccurateFix(gps?.accuracy)
   useEffect(() => {
-    const id = setTimeout(async () => {
-      const q = query.normalize('NFC').trim()
-      if (q.length < 3) {
-        setSearchResults([])
-        return
-      }
-      const url = `${API_URL}/api/public/geocode/search?q=${encodeURIComponent(q)}&limit=10&countrycodes=se`
-      try {
-        const res = await fetch(url, { headers: { Accept: 'application/json' } })
-        if (!res.ok) {
-          setSearchResults([])
-          return
-        }
-        const data = (await res.json()) as NominatimResult[]
-        const list = Array.isArray(data) ? dedupeNominatimResults(data).slice(0, 5) : []
-        setSearchResults(list)
-      } catch {
-        setSearchResults([])
-      }
-    }, 350)
-    return () => clearTimeout(id)
-  }, [query])
+    if (gpsLat == null || gpsLon == null || !gpsAccurate) return
+    const ac = new AbortController()
+    nearestStop(tokenRef.current, gpsLat, gpsLon, ac.signal)
+      .then((r) => {
+        if (!ac.signal.aborted) setStop(r)
+      })
+      .catch(() => {
+        /* the hint is optional */
+      })
+    return () => ac.abort()
+  }, [gpsLat, gpsLon, gpsAccurate])
 
   function recenterMapOnField(field: 'from' | 'to') {
     const m = mapRef.current
@@ -375,9 +389,8 @@ export function BookingPage() {
     }, 80)
   }
 
-  function applySearchResult(item: NominatimResult) {
-    const lat = Number(item.lat)
-    const lon = Number(item.lon)
+  function applySearchResult(item: PlaceResult, field: 'from' | 'to') {
+    const { lat, lon } = item
     if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
     reverseGeocodeDebounceRef.current = null
     mapClickReverseAbortRef.current?.abort()
@@ -385,23 +398,56 @@ export function BookingPage() {
     skipReverseOnMoveEndRef.current = true
     mapRef.current?.setView([lat, lon], 15)
     lastStableMapCenterRef.current = { lat, lng: lon }
-    lastLocationSetRef.current = activeField
+    lastLocationSetRef.current = field
     window.setTimeout(() => {
       programmaticCameraRef.current = false
     }, 80)
-    const label = formatNominatimAddress(item) || item.display_name
-    if (activeField === 'from') {
-      setDraft((d) => ({ ...d, fromAddress: label, fromLat: lat, fromLon: lon }))
+    const label = item.formattedAddress || item.name
+    if (field === 'from') {
+      setDraft((d) => ({ ...d, fromAddress: label, fromIsGps: false, fromLat: lat, fromLon: lon }))
     } else {
       setDraft((d) => ({ ...d, toAddress: label, toLat: lat, toLon: lon }))
     }
-    setSearchResults([])
-    setQuery('')
+  }
+
+  function clearField(field: 'from' | 'to') {
+    mapClickReverseAbortRef.current?.abort()
+    // ✕ resets the coordinates too, so a stale pin/route never survives an emptied field
+    if (field === 'from') {
+      setDraft((d) => ({ ...d, fromAddress: '', fromIsGps: false, fromLat: defaultDraft.fromLat, fromLon: defaultDraft.fromLon }))
+    } else {
+      setDraft((d) => ({ ...d, toAddress: '', toLat: defaultDraft.toLat, toLon: defaultDraft.toLon }))
+    }
+  }
+
+  function chooseStopAsPickup(s: NearestStop) {
+    applySearchResult(
+      {
+        provider: 'SL',
+        providerPlaceId: s.providerPlaceId,
+        kind: 'STOP',
+        name: s.name,
+        area: s.area,
+        formattedAddress: s.area ? `${s.name} — ${s.area} (hållplats)` : `${s.name} (hållplats)`,
+        lat: s.lat,
+        lon: s.lon,
+        distanceKm: s.distanceM / 1000
+      },
+      'from'
+    )
   }
 
   async function submitAkaNu() {
     await runBooking(async () => {
-      const payload = buildRideBookPayload(draft, 'NOW')
+      let payload: Record<string, unknown>
+      try {
+        payload = buildRideBookPayload(draft, 'NOW')
+      } catch (err) {
+        if (!(err instanceof UnresolvedPickupError)) throw err
+        setSheetOpen(false)
+        onToast(t('booking.pickupUnresolved'))
+        return
+      }
       const key = idempotency.current.keyFor(payload)
       try {
         const ride = await api<RideResponse>('/api/rides', {
@@ -430,12 +476,52 @@ export function BookingPage() {
     return true
   }
 
+  /**
+   * "Min position" is only a display default: before booking, swap it for a real label so the driver never sees it.
+   * Reverse geocode -> "Nära <stop>" -> "Min position (GPS) lat, lon".
+   */
+  async function resolveMyPosition(): Promise<boolean> {
+    const d = draftRef.current
+    if (!d.fromIsGps) {
+      if (isMyPositionText(d.fromAddress)) {
+        // The placeholder text without a GPS fix behind it (typed by hand): never send it.
+        onToast(t('booking.pickupUnresolved'))
+        return false
+      }
+      return true
+    }
+    const { fromLat: lat, fromLon: lon } = d
+    let label: string | null
+    try {
+      label = (await reversePlace(token, lat, lon))?.formattedAddress || null
+    } catch {
+      label = null
+    }
+    if (!label && stop) label = t('placeSearch.nearStop', { name: stop.name })
+    if (!label) label = t('placeSearch.gpsFallback', { lat: lat.toFixed(5), lon: lon.toFixed(5) })
+    const resolved = label
+    // Only if the user has not changed the pickup meanwhile (typing/choosing clears the GPS flag).
+    setDraft((cur) => (cur.fromIsGps ? { ...cur, fromAddress: resolved, fromIsGps: false } : cur))
+    return draftRef.current.fromIsGps || !isMyPositionText(draftRef.current.fromAddress)
+  }
+
+  async function resolveThen(next: () => void) {
+    setResolving(true)
+    try {
+      if (await resolveMyPosition()) next()
+    } finally {
+      setResolving(false)
+    }
+  }
+
   function goForboka() {
-    if (validateDraft()) navigate('/app/forboka')
+    if (!validateDraft()) return
+    void resolveThen(() => navigate('/app/forboka'))
   }
 
   function bookAkaNu() {
-    if (validateDraft()) setSheetOpen(true)
+    if (!validateDraft()) return
+    void resolveThen(() => setSheetOpen(true))
   }
 
   function editFromSheet(field: BookingEditField) {
@@ -465,79 +551,59 @@ export function BookingPage() {
         <div className="address-flow">
           <div className="address-line" aria-hidden />
           <div className="address-fields">
-            <div className="field-wrap">
-              <input
-                className="sheet-input"
-                data-booking-field="from"
-                value={draft.fromAddress}
-                placeholder={t('booking.pickupPlaceholder')}
-                aria-label={t('booking.pickupAria')}
-                onFocus={() => {
-                  setActiveField('from')
-                  setQuery(draft.fromAddress)
-                  recenterMapOnField('from')
-                }}
-                onChange={(e) => {
-                  setActiveField('from')
-                  const v = e.target.value
-                  setDraft((d) => ({ ...d, fromAddress: v }))
-                  setQuery(v)
-                }}
-              />
-              {draft.fromAddress && (
-                <button
-                  type="button"
-                  className="field-clear"
-                  aria-label={t('booking.clearPickup')}
-                  onClick={() => setDraft((d) => ({ ...d, fromAddress: '' }))}
-                >
-                  ×
+            <PlaceSearchInput
+              token={token}
+              fieldName="from"
+              value={draft.fromIsGps ? t('placeSearch.myPosition') : draft.fromAddress}
+              placeholder={t('booking.pickupPlaceholder')}
+              ariaLabel={t('booking.pickupAria')}
+              clearLabel={t('booking.clearPickup')}
+              context={{ gps }}
+              onFocus={() => {
+                setActiveField('from')
+                recenterMapOnField('from')
+              }}
+              onChange={(v) => {
+                setActiveField('from')
+                setDraft((d) => ({ ...d, fromAddress: v, fromIsGps: false }))
+              }}
+              onSelect={(p) => applySearchResult(p, 'from')}
+              onClear={() => clearField('from')}
+            />
+            {stop && gps && gpsAccurate && draft.fromIsGps && (
+              <p className="pickup-hint">
+                <span>
+                  {t('placeSearch.hereStop', { name: stop.name, dist: formatDistanceM(stop.distanceM) })}
+                </span>
+                <button type="button" className="btn btn-touch" onClick={() => chooseStopAsPickup(stop)}>
+                  {t('placeSearch.useStop')}
                 </button>
-              )}
-            </div>
-            <div className="field-wrap">
-              <input
-                className="sheet-input"
-                data-booking-field="to"
-                value={draft.toAddress}
-                placeholder={t('booking.destinationPlaceholder')}
-                aria-label={t('booking.destinationAria')}
-                onFocus={() => {
-                  setActiveField('to')
-                  setQuery(draft.toAddress)
-                  recenterMapOnField('to')
-                }}
-                onChange={(e) => {
-                  setActiveField('to')
-                  const v = e.target.value
-                  setDraft((d) => ({ ...d, toAddress: v }))
-                  setQuery(v)
-                }}
-              />
-              {draft.toAddress && (
-                <button
-                  type="button"
-                  className="field-clear"
-                  aria-label={t('booking.clearDestination')}
-                  onClick={() => setDraft((d) => ({ ...d, toAddress: '' }))}
-                >
-                  ×
-                </button>
-              )}
-            </div>
+              </p>
+            )}
+            <PlaceSearchInput
+              token={token}
+              fieldName="to"
+              value={draft.toAddress}
+              placeholder={t('booking.destinationPlaceholder')}
+              ariaLabel={t('booking.destinationAria')}
+              clearLabel={t('booking.clearDestination')}
+              context={{
+                gps,
+                pickup: draft.fromAddress.trim() ? { lat: draft.fromLat, lon: draft.fromLon } : null
+              }}
+              onFocus={() => {
+                setActiveField('to')
+                recenterMapOnField('to')
+              }}
+              onChange={(v) => {
+                setActiveField('to')
+                setDraft((d) => ({ ...d, toAddress: v }))
+              }}
+              onSelect={(p) => applySearchResult(p, 'to')}
+              onClear={() => clearField('to')}
+            />
           </div>
         </div>
-        {searchResults.length > 0 && query.normalize('NFC').trim().length >= 3 && (
-          <ul className="search-list sheet-search">
-            {searchResults.map((item, idx) => (
-              <li key={`${item.lat}-${item.lon}-${idx}`}>
-                <button type="button" onClick={() => applySearchResult(item)}>
-                  {formatNominatimAddress(item) || item.display_name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
         <p className="dist-hint">
           {roadRoute
             ? t('booking.roadRoute', { km: roadRoute.km.toFixed(1), min: roadRoute.min })
@@ -549,11 +615,11 @@ export function BookingPage() {
           onChange={(v) => setDraft((d) => ({ ...d, pickupNote: v }))}
         />
         <div className="booking-actions">
-          <button type="button" className="btn btn-outline" onClick={goForboka} disabled={booking}>
-            {t('booking.forboka')}
+          <button type="button" className="btn btn-outline" onClick={goForboka} disabled={booking || resolving}>
+            {resolving ? t('booking.resolvingAddress') : t('booking.forboka')}
           </button>
-          <button type="button" className="btn btn-aka-nu" onClick={bookAkaNu} disabled={booking} aria-busy={booking}>
-            {booking ? t('booking.submitting') : t('booking.akaNu')}
+          <button type="button" className="btn btn-aka-nu" onClick={bookAkaNu} disabled={booking || resolving} aria-busy={booking || resolving}>
+            {resolving ? t('booking.resolvingAddress') : booking ? t('booking.submitting') : t('booking.akaNu')}
           </button>
         </div>
       </div>

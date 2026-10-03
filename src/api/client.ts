@@ -32,6 +32,8 @@ type ApiOpts = {
   headers?: Record<string, string>
   /** Abort and throw ApiError(status 0, code TIMEOUT) after this many ms (default 12 s). */
   timeoutMs?: number
+  /** Caller-side cancel: rejects with a DOMException named AbortError (never retried, not counted as unreachable). */
+  signal?: AbortSignal
 }
 
 function networkError(code: 'NETWORK' | 'TIMEOUT'): ApiError {
@@ -41,6 +43,10 @@ function networkError(code: 'NETWORK' | 'TIMEOUT'): ApiError {
 async function send(url: string, opts: ApiOpts, token: string | undefined): Promise<Response> {
   const controller = new AbortController()
   let timedOut = false
+  const external = opts.signal
+  if (external?.aborted) throw new DOMException('Aborted', 'AbortError')
+  const onExternalAbort = () => controller.abort()
+  external?.addEventListener('abort', onExternalAbort)
   const timer = setTimeout(() => {
     timedOut = true
     controller.abort()
@@ -61,10 +67,12 @@ async function send(url: string, opts: ApiOpts, token: string | undefined): Prom
     setBackendUnreachable(response.status === 502 || response.status === 503 || response.status === 504)
     return response
   } catch {
+    if (external?.aborted) throw new DOMException('Aborted', 'AbortError')
     setBackendUnreachable(true)
     throw networkError(timedOut ? 'TIMEOUT' : 'NETWORK')
   } finally {
     clearTimeout(timer)
+    external?.removeEventListener('abort', onExternalAbort)
   }
 }
 

@@ -1,3 +1,6 @@
+import en from '../locales/en.json'
+import sv from '../locales/sv.json'
+
 export type BookingDraft = {
   fromAddress: string
   fromLat: number
@@ -9,6 +12,22 @@ export type BookingDraft = {
   passengerUserId?: number
   /** Optional "Meddelande till föraren" (max 280 chars). */
   pickupNote?: string
+  /** Pickup is "my GPS position": fromLat/fromLon are the GPS fix and the text shown is a localised display default. */
+  fromIsGps?: boolean
+}
+
+/** The "Min position" display text in every language: must never be sent to the driver. */
+export function isMyPositionText(s: string): boolean {
+  const v = s.trim()
+  return v === sv.placeSearch.myPosition || v === en.placeSearch.myPosition
+}
+
+/** Thrown when a pickup that is still the "Min position" placeholder reaches the booking payload. */
+export class UnresolvedPickupError extends Error {
+  constructor() {
+    super('Pickup is still the "my position" placeholder')
+    this.name = 'UnresolvedPickupError'
+  }
 }
 
 export const defaultDraft: BookingDraft = {
@@ -47,6 +66,7 @@ export function readBookingDraftFromStorage(): BookingDraft | null {
       if (Number.isFinite(pid)) out.passengerUserId = pid
     }
     if (typeof o.pickupNote === 'string') out.pickupNote = o.pickupNote.slice(0, 280)
+    if (o.fromIsGps === true) out.fromIsGps = true
     return out
   } catch {
     return null
@@ -67,6 +87,7 @@ export function buildRideBookPayload(
   kind: 'NOW' | 'SCHEDULED',
   scheduledAtIso?: string
 ): Record<string, unknown> {
+  if (draft.fromIsGps || isMyPositionText(draft.fromAddress)) throw new UnresolvedPickupError()
   const body: Record<string, unknown> = {
     kind,
     fromAddress: draft.fromAddress,

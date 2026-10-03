@@ -72,7 +72,9 @@
     "forPassenger": "Passagerare",
     "ambiguousTime": "Klockan {{time}} inträffar två gånger den här natten. Vi använder den första.",
     "nonexistentTime": "Klockan {{time}} finns inte den här dagen (sommartid börjar). Välj en annan tid.",
-    "submitting": "Bokar…"
+    "submitting": "Bokar…",
+    "resolvingAddress": "Hämtar adress…",
+    "pickupUnresolved": "Vi kunde inte avgöra din startadress. Sök efter en adress eller välj på kartan."
   },
   "prebook": {
     "back": "Tillbaka",
@@ -454,5 +456,20 @@
     "unreachable": "Kunde inte nå servern — försöker igen",
     "actionFailed": "Kunde inte nå servern — försök igen",
     "lastUpdated": "Senast uppdaterad {{time}}"
+  },
+  "placeSearch": {
+    "results": "Sökträffar",
+    "searching": "Söker…",
+    "empty": "Inga träffar.",
+    "emptyHint": "Prova ett annat namn, till exempel en hållplats eller ett köpcentrum.",
+    "error": "Sökningen fungerade inte just nu. Försök igen om en stund.",
+    "showMore": "Visa fler",
+    "myPosition": "📍 Min position",
+    "selectedPlace": "Vald plats",
+    "selectedPlaceCoords": "Vald plats ({{lat}}, {{lon}})",
+    "hereStop": "📍 Här ({{name}}, {{dist}})",
+    "useStop": "Använd hållplatsen som start",
+    "nearStop": "Nära {{name}}",
+    "gpsFallback": "Min position (GPS) {{lat}}, {{lon}}"
   }
 }
