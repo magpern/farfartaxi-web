@@ -41,7 +41,11 @@ export function RideTimeEdit({ open, ride, busy, onSave, onCancel }: Props) {
     if (!m) return null
     return stockholmLocalToInstant(Number(m[1]), Number(m[2]), Number(m[3]), hour, minute)
   }, [date, hour, minute])
-  const timeChanged = resolved?.ok === true && Date.parse(resolved.iso) !== Date.parse(initialIso)
+  // Compare Stockholm wall-clock minutes, not instants: the original may carry seconds (NOW rides) and, in the
+  // ambiguous autumn hour, the same wall time maps to two instants.
+  const timeChanged =
+    resolved?.ok === true &&
+    (date !== formatYmd(init) || hour !== init.hour || minute !== init.minute)
   const noteChanged = note.trim() !== (ride.pickupNote ?? '').trim()
   const changed = timeChanged || dest !== null || noteChanged
   const inPast = timeChanged && resolved?.ok === true && new Date(resolved.iso).getTime() <= Date.now()
