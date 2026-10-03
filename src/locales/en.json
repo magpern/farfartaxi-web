@@ -572,5 +572,40 @@
     "reminders": "Reminders",
     "remindersHint": "Rides waiting or about to start",
     "prefsFailed": "Couldn't save. Try again."
+  },
+  "live": {
+    "mapLabel": "Map showing the car's position",
+    "defaultDriver": "Grandpa",
+    "enRouteEta": "{{name}} is {{min}} min away",
+    "enRoute": "{{name}} is on the way",
+    "arrived": "{{name}} has arrived!",
+    "pickedUpEta": "Arriving in about {{min}} min",
+    "pickedUp": "You are on your way",
+    "updatedAgoSec": "updated {{n}} s ago",
+    "updatedAgoMin": "updated {{n}} min ago",
+    "stale": "{{nameGen}} position has not been updated for {{min}} min – the screen may be off",
+    "staleNone": "We have not received a position from {{name}} yet",
+    "wakeLockOn": "Screen is kept on",
+    "wakeLockHint": "Keep the screen on while driving",
+    "locationOff": "Location sharing is off – {{name}} cannot see you on the map",
+    "locationRetry": "Try again",
+    "share": "Share the ride",
+    "shareText": "Follow my ride",
+    "stopSharing": "Stop sharing",
+    "shareStopped": "Sharing stopped.",
+    "shareHeader": "{{passenger}} is riding with {{driver}}",
+    "shareExpired": "This link has expired",
+    "shareExpiredHint": "The ride has ended or sharing was turned off.",
+    "shareMissing": "This link does not exist",
+    "shareError": "Could not load the ride right now. Retrying.",
+    "shareStatus": {
+      "COMPLETED": "The ride is finished.",
+      "CANCELLED": "The ride was cancelled."
+    },
+    "shareLink": "Share the link",
+    "waiting": "Waiting for {{nameGen}} position…",
+    "locationDenied": "Location access is blocked – {{name}} cannot see you on the map.",
+    "locationDeniedIos": "Open Settings → Privacy & Security → Location Services → Safari (or Farfartaxi) and choose “While Using”.",
+    "locationDeniedAndroid": "Open the site settings for this page in your browser (lock icon in the address bar) and allow Location."
   }
 }

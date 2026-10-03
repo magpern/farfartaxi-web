@@ -572,5 +572,40 @@
     "reminders": "Påminnelser",
     "remindersHint": "Resor som väntar eller snart ska köras",
     "prefsFailed": "Kunde inte spara. Försök igen."
+  },
+  "live": {
+    "mapLabel": "Karta med bilens position",
+    "defaultDriver": "Farfar",
+    "enRouteEta": "{{name}} är {{min}} min bort",
+    "enRoute": "{{name}} är på väg",
+    "arrived": "{{name}} är framme!",
+    "pickedUpEta": "Framme om ca {{min}} min",
+    "pickedUp": "Ni är på väg",
+    "updatedAgoSec": "uppdaterad för {{n}} s sedan",
+    "updatedAgoMin": "uppdaterad för {{n}} min sedan",
+    "stale": "{{nameGen}} position har inte uppdaterats på {{min}} min – skärmen kanske är avstängd",
+    "staleNone": "Vi har ännu inte fått någon position från {{name}} – skärmen kanske är avstängd",
+    "wakeLockOn": "Skärmen hålls tänd",
+    "wakeLockHint": "Håll skärmen tänd medan du kör",
+    "locationOff": "Platsdelning är av – {{name}} ser dig inte på kartan",
+    "locationRetry": "Försök igen",
+    "share": "Dela resan",
+    "shareText": "Följ min resa",
+    "stopSharing": "Sluta dela",
+    "shareStopped": "Delningen är avslutad.",
+    "shareHeader": "{{passenger}} åker med {{driver}}",
+    "shareExpired": "Länken har gått ut",
+    "shareExpiredHint": "Resan är avslutad eller delningen har stängts av.",
+    "shareMissing": "Länken finns inte",
+    "shareError": "Kunde inte hämta resan just nu. Vi försöker igen.",
+    "shareStatus": {
+      "COMPLETED": "Resan är klar.",
+      "CANCELLED": "Resan är avbokad."
+    },
+    "shareLink": "Dela länken",
+    "waiting": "Väntar på {{nameGen}} position…",
+    "locationDenied": "Platsåtkomst är blockerad – {{name}} ser dig inte på kartan.",
+    "locationDeniedIos": "Öppna Inställningar → Integritet och säkerhet → Platstjänster → Safari (eller Farfartaxi) och välj ”Vid användning”.",
+    "locationDeniedAndroid": "Öppna webbplatsinställningarna för sidan i webbläsaren (låsikonen i adressfältet) och tillåt Plats."
   }
 }

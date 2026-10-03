@@ -6,6 +6,10 @@ import { cacheRide, readCachedRide } from '../lib/rideCache'
 import { renderApp, ride } from '../test/render'
 import { ActiveRidePage } from './ActiveRidePage'
 
+vi.mock('../components/LiveRideMap', () => ({
+  LiveRideMap: (p: { car: unknown; target: string }) => <div data-testid="map" data-target={p.target} data-car={JSON.stringify(p.car)} />
+}))
+
 const apiMock = vi.fn()
 vi.mock('../api/client', async (orig) => ({
   ...(await orig<typeof import('../api/client')>()),
@@ -92,5 +96,34 @@ describe('passenger ride screen', () => {
     show()
     expect(await screen.findByRole('button', { name: 'Boka ny resa' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Betygsätt resan' })).toBeNull()
+  })
+
+  it('shows the live map, ETA line and share button while the car is on the way', async () => {
+    apiMock.mockImplementation((path: string) =>
+      path === '/api/rides/7'
+        ? Promise.resolve({
+            ...accepted,
+            status: 'EN_ROUTE',
+            etaMinutes: 6,
+            etaTarget: 'PICKUP',
+            lastDriverLat: 59.1,
+            lastDriverLon: 18.1,
+            lastLocationAccuracyM: 150,
+            lastLocationAt: new Date().toISOString()
+          })
+        : Promise.resolve([])
+    )
+    show()
+    expect(await screen.findByTestId('live-status-line')).toHaveTextContent('Folke är 6 min bort')
+    expect(screen.getByTestId('map')).toHaveAttribute('data-car', JSON.stringify({ lat: 59.1, lon: 18.1, accuracyM: 150 }))
+    expect(screen.getByRole('button', { name: 'Dela resan' })).toBeInTheDocument()
+  })
+
+  it('has no share button or map once completed', async () => {
+    apiMock.mockImplementation((path: string) => (path === '/api/rides/7' ? Promise.resolve({ ...accepted, status: 'COMPLETED' }) : Promise.resolve([])))
+    show()
+    await screen.findByRole('heading')
+    expect(screen.queryByRole('button', { name: 'Dela resan' })).toBeNull()
+    expect(screen.queryByTestId('map')).toBeNull()
   })
 })

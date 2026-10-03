@@ -13,6 +13,9 @@ import { QuickMessages } from '../components/QuickMessages'
 import { RideMessages } from '../components/RideMessages'
 import { DRIVER_STEPS, useDriverRideActions } from '../components/rideActions'
 import { Button, Card } from '../components/ui'
+import { isDrivingStatus } from '../lib/liveTracking'
+import { retryTracking, useTrackingError } from '../lib/useDriverTracking'
+import { useWakeLock } from '../lib/useWakeLock'
 import { useActiveRide } from '../shell/ActiveRide'
 import { useShell } from '../shell/ShellContext'
 
@@ -57,6 +60,8 @@ function DrivingScreen({ id }: { id: string | undefined }) {
   )
 }
 
+const isIos = () => typeof navigator !== 'undefined' && /iP(hone|ad|od)/.test(navigator.userAgent)
+
 function DrivingBody({
   ride,
   token,
@@ -78,6 +83,9 @@ function DrivingBody({
   const messages = useRideMessages(ride, token)
   const a = useDriverRideActions({ ride, token, onToast, onChanged })
   const first = ride.passengerName?.split(' ')[0] || t('driver.passengerFallback')
+  const tracking = isDrivingStatus(ride.status)
+  const wake = useWakeLock(tracking)
+  const trackingError = useTrackingError()
   const step = DRIVER_STEPS.find((s) => s.action !== 'ACCEPT' && hasAction(ride, s.action))
   const finished = ride.status === 'COMPLETED' || ride.status === 'CANCELLED'
   const headlineStatus = ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'PICKED_UP', 'COMPLETED', 'CANCELLED'].includes(ride.status)
@@ -91,6 +99,27 @@ function DrivingBody({
       <button type="button" className="link-back" onClick={onBack}>
         {t('driving.back')}
       </button>
+
+      {tracking && trackingError && (
+        <div className="banner-danger location-off" role="alert">
+          {trackingError === 'denied' ? (
+            // A denied permission cannot be re-prompted from the page: point to the settings instead of a retry button.
+            <>
+              <strong>{t('live.locationDenied', { name: first })}</strong>
+              <p className="tiny" data-testid="location-denied-help">
+                {isIos() ? t('live.locationDeniedIos') : t('live.locationDeniedAndroid')}
+              </p>
+            </>
+          ) : (
+            <>
+              <strong>{t('live.locationOff', { name: first })}</strong>
+              <Button variant="secondary" onClick={retryTracking}>
+                {t('live.locationRetry')}
+              </Button>
+            </>
+          )}
+        </div>
+      )}
 
       <Card tone="highlight">
         <h1 className="ride-headline">{t(`driving.headline.${headlineStatus}`, { name: first })}</h1>
@@ -116,6 +145,11 @@ function DrivingBody({
         <Button variant="primary" size="huge" block disabled={a.busy} onClick={() => void a.simple(step.path, step.toastKey)}>
           {a.busy ? t('common.working') : t(step.labelKey)}
         </Button>
+      )}
+      {tracking && (
+        <p className={`tiny wake-lock ${wake.held ? 'wake-lock-on' : ''}`} data-testid="wake-lock">
+          {wake.held ? `🔆 ${t('live.wakeLockOn')}` : t('live.wakeLockHint')}
+        </p>
       )}
       {finished && (
         <Button variant="primary" size="huge" block onClick={onBack}>

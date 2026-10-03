@@ -108,16 +108,6 @@ export function RidesPage() {
 
   const groups = useMemo(() => groupPassengerRides(rides ?? []), [rides])
 
-  async function share(rideId: number) {
-    try {
-      const res = await api<{ url: string }>(`/api/rides/${rideId}/share`, { method: 'POST', token })
-      await navigator.clipboard.writeText(res.url)
-      onToast(t('rides.shareCopiedToast'))
-    } catch (err) {
-      onToast(apiErrorMessage(err, t))
-    }
-  }
-
   async function deleteRide(rideId: number) {
     try {
       await api(`/api/rides/${rideId}`, { method: 'DELETE', token })
@@ -154,7 +144,6 @@ export function RidesPage() {
       userId={user.id}
       onToast={onToast}
       onChanged={load}
-      onShare={share}
       onDelete={deleteRide}
       onOpen={(id) => navigate(`/app/resa/${id}`)}
     />
