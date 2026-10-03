@@ -65,12 +65,14 @@ export function BookingPage() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [whenOpen, setWhenOpen] = useState(false)
   const [toSave, setToSave] = useState<PlaceDraft | null>(null)
-  const { places: savedPlaces, reload: reloadSaved } = useSavedPlaces(token)
-  const recents = useRecentPlaces(token)
+  // A driver booking for a passenger uses that passenger's places; otherwise the user's own.
+  const forUserId = isDriver ? draft.passengerUserId : undefined
+  const { places: savedPlaces, failed: savedFailed, reload: reloadSaved } = useSavedPlaces(token, forUserId)
+  const recents = useRecentPlaces(token, forUserId)
   const homePlace = savedPlaces?.find((p) => p.kind === 'HOME') ?? null
   const { busy: booking, run: runBooking } = useBusy()
   const idempotency = useRef(createIdempotencyHolder())
-  const bookingUsers = useBookingUsers(token, isDriver && sheetOpen)
+  const bookingUsers = useBookingUsers(token, isDriver)
   const draftRef = useRef(draft)
   draftRef.current = draft
   const mapRef = useRef<L.Map | null>(null)
@@ -93,6 +95,10 @@ export function BookingPage() {
   const [gps, setGps] = useState<Gps | null>(null)
   const [resolving, setResolving] = useState(false)
   const [stop, setStop] = useState<NearestStop | null>(null)
+  /** Cold-start location fix: 'pending' until the first answer; 'failed' on error / no permission / coarse fix. */
+  const [gpsState, setGpsState] = useState<'pending' | 'fix' | 'failed'>(() =>
+    typeof navigator !== 'undefined' && navigator.geolocation ? 'pending' : 'failed'
+  )
 
   activeFieldRef.current = activeField
 
@@ -191,21 +197,31 @@ export function BookingPage() {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
           const { latitude, longitude, accuracy } = pos.coords
-          if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return
+          if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            setGpsState('failed')
+            return
+          }
           setGps({ lat: latitude, lon: longitude, accuracy: Number.isFinite(accuracy) ? accuracy : undefined })
-          const m = mapRef.current
-          if (!m || !bothAddressesEmpty) return
           // A coarse fix (cell/IP based) is no pickup: only trust it below 1 km.
-          if (!isAccurateFix(accuracy)) return
+          if (!isAccurateFix(accuracy)) {
+            setGpsState('failed')
+            return
+          }
+          setGpsState('fix')
           const cur = draftRef.current
-          if (cur.fromAddress.trim() || cur.toAddress.trim()) return
-          programmaticCameraRef.current = true
-          skipReverseOnMoveEndRef.current = true
-          m.setView([latitude, longitude], 17)
-          lastStableMapCenterRef.current = { lat: latitude, lng: longitude }
-          window.setTimeout(() => {
-            programmaticCameraRef.current = false
-          }, 80)
+          // Pickup is set whenever it is still empty (also when "Åk hem" already filled the destination).
+          if (cur.fromAddress.trim()) return
+          const m = mapRef.current
+          // Only move the camera when no destination was chosen meanwhile.
+          if (m && !cur.toAddress.trim()) {
+            programmaticCameraRef.current = true
+            skipReverseOnMoveEndRef.current = true
+            m.setView([latitude, longitude], 17)
+            lastStableMapCenterRef.current = { lat: latitude, lng: longitude }
+            window.setTimeout(() => {
+              programmaticCameraRef.current = false
+            }, 80)
+          }
           // Default pickup: where the phone is.
           setDraft((d) =>
             d.fromAddress.trim()
@@ -215,6 +231,7 @@ export function BookingPage() {
         },
         () => {
           /* keep default map center; permission denied or timeout: search still works without a context */
+          setGpsState('failed')
         },
         { enableHighAccuracy: false, maximumAge: 60_000, timeout: 12_000 }
       )
@@ -551,9 +568,12 @@ export function BookingPage() {
     }
     fillDestination({ label: homePlace.label, address: homePlace.formattedAddress || homePlace.address, lat: homePlace.lat, lon: homePlace.lon })
     if (!draftRef.current.fromAddress.trim()) {
-      onToast(t('home.needPickup'))
-      focusBookingField('from')
-      return
+      if (gpsState !== 'pending') {
+        onToast(t('home.needPickup'))
+        focusBookingField('from')
+        return
+      }
+      // Slow cold-start fix: the sheet waits for it ("Hämtar din position…") instead of bouncing the user.
     }
     setWhenOpen(true)
   }
@@ -565,7 +585,9 @@ export function BookingPage() {
     if (!wantsWhen || whenAsked.current) return
     whenAsked.current = true
     if (draftRef.current.fromAddress.trim() && draftRef.current.toAddress.trim()) setWhenOpen(true)
-  }, [wantsWhen])
+    // Used once: clear the router state so Back never reopens the sheet.
+    navigate(location.pathname + location.search, { replace: true, state: null })
+  }, [wantsWhen, navigate, location.pathname, location.search])
 
   function editFromSheet(field: BookingEditField) {
     if (field === 'who') {
@@ -583,6 +605,11 @@ export function BookingPage() {
   const bookedFor = isDriver && draft.passengerUserId != null
     ? (bookingUsers?.find((u) => u.id === draft.passengerUserId)?.fullName ?? null)
     : null
+  const saveForName = bookedFor?.split(' ')[0] ?? null
+  const homeStatus = savedPlaces === null ? 'loading' : savedFailed && !homePlace ? 'failed' : 'ready'
+  const pickupEmpty = !draft.fromAddress.trim()
+  const waitingForFix = whenOpen && pickupEmpty && gpsState === 'pending'
+  const needsPickup = whenOpen && pickupEmpty && gpsState === 'failed'
 
   return (
     <div className="booking-layout">
@@ -595,6 +622,8 @@ export function BookingPage() {
           places={savedPlaces ?? []}
           recents={recents}
           hasHome={homePlace !== null}
+          homeStatus={homeStatus}
+          onRetry={() => void reloadSaved()}
           disabled={booking || resolving}
           onGoHome={goHome}
           onPlace={(p) => fillDestination({ label: p.label, address: p.formattedAddress || p.address, lat: p.lat, lon: p.lon })}
@@ -685,12 +714,31 @@ export function BookingPage() {
       </div>
       <BottomSheet open={whenOpen} title={t('home.whenTitle')} onClose={() => setWhenOpen(false)}>
         <div className="stack">
-          <p className="muted">{t('home.route', { from: draft.fromIsGps ? t('placeSearch.myPosition') : draft.fromAddress, to: draft.toAddress })}</p>
+          {waitingForFix ? (
+            <p className="muted" role="status">{t('home.locating')}</p>
+          ) : needsPickup ? (
+            <p className="muted" role="status">{t('home.choosePickupHelp')}</p>
+          ) : (
+            <p className="muted">{t('home.route', { from: draft.fromIsGps ? t('placeSearch.myPosition') : draft.fromAddress, to: draft.toAddress })}</p>
+          )}
+          {needsPickup && (
+            <Button
+              variant="primary"
+              size="lg"
+              block
+              onClick={() => {
+                setWhenOpen(false)
+                focusBookingField('from')
+              }}
+            >
+              {t('home.choosePickup')}
+            </Button>
+          )}
           <Button
             variant="primary"
             size="lg"
             block
-            disabled={resolving}
+            disabled={resolving || pickupEmpty}
             onClick={() => {
               setWhenOpen(false)
               bookAkaNu()
@@ -701,7 +749,7 @@ export function BookingPage() {
           <Button
             size="lg"
             block
-            disabled={resolving}
+            disabled={resolving || pickupEmpty}
             onClick={() => {
               setWhenOpen(false)
               goForboka()
@@ -715,6 +763,8 @@ export function BookingPage() {
         open={toSave !== null}
         place={toSave}
         token={token}
+        userId={forUserId}
+        forName={saveForName}
         onClose={() => setToSave(null)}
         onSaved={() => void reloadSaved()}
         onToast={onToast}

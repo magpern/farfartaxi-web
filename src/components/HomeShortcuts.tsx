@@ -7,6 +7,8 @@ export function HomeShortcuts({
   places,
   recents,
   hasHome,
+  homeStatus = 'ready',
+  onRetry,
   disabled,
   onGoHome,
   onPlace,
@@ -15,6 +17,9 @@ export function HomeShortcuts({
   places: SavedPlace[]
   recents: PlaceResult[]
   hasHome: boolean
+  /** 'loading'/'failed': the saved places are unknown, so never offer "Spara ditt hem". */
+  homeStatus?: 'loading' | 'failed' | 'ready'
+  onRetry?: () => void
   disabled?: boolean
   onGoHome: () => void
   onPlace: (p: SavedPlace) => void
@@ -24,10 +29,23 @@ export function HomeShortcuts({
   const chips = places.filter((p) => p.kind !== 'HOME')
   return (
     <div className="home-shortcuts">
-      <button type="button" className="go-home-btn" onClick={onGoHome} disabled={disabled}>
-        {hasHome ? t('home.goHome') : t('home.saveHome')}
-      </button>
-      {places.length > 0 && (
+      {homeStatus === 'ready' ? (
+        <button type="button" className="go-home-btn" onClick={onGoHome} disabled={disabled}>
+          {hasHome ? t('home.goHome') : t('home.saveHome')}
+        </button>
+      ) : (
+        <>
+          <button type="button" className="go-home-btn" disabled aria-busy={homeStatus === 'loading'}>
+            {homeStatus === 'loading' ? t('common.loading') : t('home.saveHome')}
+          </button>
+          {homeStatus === 'failed' && onRetry && (
+            <button type="button" className="btn btn-touch tiny" onClick={onRetry}>
+              {t('home.retry')}
+            </button>
+          )}
+        </>
+      )}
+      {chips.length > 0 && (
         <div className="fav-chips" role="group" aria-label={t('home.favorites')}>
           {chips.map((p) => (
             <button key={p.id} type="button" className="fav-chip" onClick={() => onPlace(p)}>

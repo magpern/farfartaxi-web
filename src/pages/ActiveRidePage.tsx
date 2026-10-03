@@ -124,7 +124,7 @@ function RideBody({
   const saved = useSavedPlaces(token)
   const [savingPlace, setSavingPlace] = useState<PlaceDraft | null>(null)
   const alreadySaved = (saved.places ?? []).some((p) => haversine(p.lat, p.lon, ride.toLat, ride.toLon) < 0.03)
-  const canSavePlace = ride.passengerId === userId && saved.places !== null && !alreadySaved
+  const canSavePlace = ride.status === 'COMPLETED' && ride.passengerId === userId && saved.places !== null && !alreadySaved
   const hasDriver = !!ride.acceptedByDriverName && ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'PICKED_UP', 'COMPLETED'].includes(ride.status)
 
   return (

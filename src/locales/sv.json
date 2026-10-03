@@ -474,7 +474,10 @@
       "WORK": "Jobb",
       "FAMILY": "Familj",
       "OTHER": "Favorit"
-    }
+    },
+    "nameInvalid": "Namnet är för långt eller ogiltigt",
+    "savedToastFor": "Sparade {{name}} för {{who}}",
+    "saveTitleFor": "Spara plats för {{who}}"
   },
   "more": {
     "largeText": "Stor text",
@@ -513,6 +516,10 @@
     "route": "Från {{from}} till {{to}}",
     "needPickup": "Välj först var du är, så åker vi hem.",
     "rebook": "Boka igen",
-    "rebookAria": "Boka resan till {{to}} igen"
+    "rebookAria": "Boka resan till {{to}} igen",
+    "locating": "Hämtar din position…",
+    "choosePickup": "Välj var du är",
+    "choosePickupHelp": "Vi hittar inte din position. Välj var du är, så åker vi hem.",
+    "retry": "Försök igen"
   }
 }

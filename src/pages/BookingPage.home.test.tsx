@@ -29,7 +29,12 @@ import { BookingPage } from './BookingPage'
 let draftNow: BookingDraft
 function Where() {
   const l = useLocation()
-  return <p>{l.search.replace('?', '')}</p>
+  return (
+    <>
+      <p>{l.search.replace('?', '')}</p>
+      <p data-testid="nav-state">{JSON.stringify(l.state)}</p>
+    </>
+  )
 }
 function LangSwitch() {
   const { setLocale } = useI18n()
@@ -47,13 +52,19 @@ function Wrapper({ initial = defaultDraft }: { initial?: BookingDraft }) {
   )
 }
 
-function stubGeolocation(mode: 'ok' | 'denied') {
+const geo = { ok: null as null | ((p: unknown) => void), err: null as null | (() => void) }
+/** 'late': the fix is delivered later by calling geo.ok / geo.err. */
+function stubGeolocation(mode: 'ok' | 'denied' | 'late') {
   vi.stubGlobal('navigator', {
     ...navigator,
     geolocation: {
       getCurrentPosition: (ok: (p: unknown) => void, err: () => void) => {
         if (mode === 'ok') ok({ coords: { latitude: 59.4, longitude: 17.8, accuracy: 20 } })
-        else err()
+        else if (mode === 'denied') err()
+        else {
+          geo.ok = ok
+          geo.err = err
+        }
       }
     }
   })
@@ -106,6 +117,57 @@ describe('Home screen "Vart ska du?"', () => {
     const body = JSON.parse(String(post?.[1]?.body))
     expect(body).toMatchObject({ kind: 'NOW', toAddress: 'Storgatan 1, Kista', toLat: 59.5, toLon: 18.0, fromAddress: 'Sveavägen 12, Stockholm', fromLat: 59.4, fromLon: 17.8 })
     expect(body.fromAddress).not.toMatch(/Min position/)
+  })
+
+  it('slow GPS: Åk hem opens the sheet waiting for the fix, Nu is enabled when it arrives, still 3 taps', async () => {
+    stubGeolocation('late')
+    const f = backend([HOME])
+    renderApp(<Wrapper />)
+    await flush()
+    let taps = 0
+    const tapBtn = async (name: string | RegExp) => {
+      fireEvent.click(screen.getByRole('button', { name }))
+      taps++
+      await flush()
+    }
+    await tapBtn(/Åk hem/)
+    expect(screen.getByText('Hämtar din position…')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Nu' })).toBeDisabled()
+    await act(async () => { geo.ok?.({ coords: { latitude: 59.4, longitude: 17.8, accuracy: 20 } }) })
+    await flush()
+    expect(screen.getByRole('button', { name: 'Nu' })).toBeEnabled()
+    await tapBtn('Nu')
+    await tapBtn('Ja, boka nu')
+    expect(taps).toBe(3)
+    const post = f.mock.calls.find((c) => String(c[0]).includes('/api/rides') && c[1]?.method === 'POST')
+    expect(JSON.parse(String(post?.[1]?.body))).toMatchObject({ toAddress: 'Storgatan 1, Kista', fromAddress: 'Sveavägen 12, Stockholm' })
+  })
+
+  it('slow GPS that fails after Åk hem: shows "Välj var du är" guidance', async () => {
+    stubGeolocation('late')
+    backend([HOME])
+    renderApp(<Wrapper />)
+    await flush()
+    fireEvent.click(screen.getByRole('button', { name: /Åk hem/ }))
+    await flush()
+    await act(async () => { geo.err?.() })
+    await flush()
+    expect(screen.getByRole('button', { name: 'Välj var du är' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Nu' })).toBeDisabled()
+  })
+
+  it('"Spara ditt hem" is not offered while saved places load or fail', async () => {
+    stubGeolocation('denied')
+    mockFetch(
+      (u) => (u.pathname === '/api/saved-places' ? new Response('x', { status: 500 }) : undefined),
+      (u) => (u.pathname === '/api/places/recent' ? json([]) : undefined)
+    )
+    renderApp(<Wrapper />)
+    expect(screen.queryByRole('button', { name: /Spara ditt hem/ })).toBeNull()
+    await flush()
+    await flush()
+    expect(screen.getByRole('button', { name: /Spara ditt hem/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Försök igen' })).toBeInTheDocument()
   })
 
   it('without GPS, Åk hem fills Home but asks for a pickup first', async () => {
@@ -171,5 +233,6 @@ describe('Home screen "Vart ska du?"', () => {
     await flush()
     expect(screen.getByRole('button', { name: 'Välj tid' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Nu' })).toBeInTheDocument()
+    expect(screen.getByTestId('nav-state').textContent).toBe('null') // used once: Back must not reopen it
   })
 })

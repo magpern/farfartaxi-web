@@ -56,7 +56,15 @@ export const deleteSavedPlace = (token: string, id: number) => api(`/api/saved-p
 export const reorderSavedPlaces = (token: string, ids: number[], userId?: number) =>
   api(`/api/saved-places/order${q(userId)}`, { method: 'PUT', token, body: JSON.stringify({ ids }) })
 
-export const recentPlaces = (token: string, limit = 6) => api<PlaceResult[]>(`/api/places/recent?limit=${limit}`, { token })
+export const recentPlaces = (token: string, limit = 6, userId?: number) =>
+  api<PlaceResult[]>(`/api/places/recent?limit=${limit}${userId != null ? `&userId=${userId}` : ''}`, { token })
+
+export const MAX_PLACE_NAME = 60
+
+/** Default saved-place name from an address: the part before the first comma ("Sveavägen 12, Stockholm" -> "Sveavägen 12"), max 60 chars. */
+export function placeNameFromAddress(address: string): string {
+  return address.split(',')[0].trim().slice(0, MAX_PLACE_NAME)
+}
 
 /** Draft of a place to save: from a search result or a finished ride. */
 export type PlaceDraft = {

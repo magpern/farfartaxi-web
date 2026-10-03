@@ -474,7 +474,10 @@
       "WORK": "Work",
       "FAMILY": "Family",
       "OTHER": "Favourite"
-    }
+    },
+    "nameInvalid": "The name is too long or invalid",
+    "savedToastFor": "Saved {{name}} for {{who}}",
+    "saveTitleFor": "Save place for {{who}}"
   },
   "more": {
     "largeText": "Large text",
@@ -513,6 +516,10 @@
     "route": "From {{from}} to {{to}}",
     "needPickup": "First choose where you are, then we go home.",
     "rebook": "Book again",
-    "rebookAria": "Book the ride to {{to}} again"
+    "rebookAria": "Book the ride to {{to}} again",
+    "locating": "Getting your position…",
+    "choosePickup": "Choose where you are",
+    "choosePickupHelp": "We can't find your position. Choose where you are and we'll head home.",
+    "retry": "Try again"
   }
 }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ApiError } from '../api/client'
 import { useSearchParams } from 'react-router-dom'
 import { useI18n } from '../i18n/context'
 import { apiErrorMessage } from '../lib/apiErrors'
@@ -7,6 +8,7 @@ import { useSavedPlaces } from '../lib/useSavedPlaces'
 import {
   deleteSavedPlace,
   draftFromResult,
+  MAX_PLACE_NAME,
   reorderSavedPlaces,
   SAVED_KIND_ICON,
   updateSavedPlace,
@@ -163,6 +165,7 @@ export function PlacesPage() {
         place={toSave}
         token={token}
         userId={userId}
+        forName={forName?.split(' ')[0]}
         onClose={() => {
           setToSave(null)
         }}
@@ -189,6 +192,7 @@ export function PlacesPage() {
             setEditing(null)
             await reload()
           } catch (err) {
+            if (err instanceof ApiError && err.status === 400) throw err // shown next to the name field
             onToast(apiErrorMessage(err, t))
           }
         }}
@@ -220,9 +224,11 @@ function EditPlaceSheet({
   const [label, setLabel] = useState('')
   const [kind, setKind] = useState<SavedPlaceKind>('OTHER')
   const [busy, setBusy] = useState(false)
+  const [nameError, setNameError] = useState(false)
   useEffect(() => {
     if (place) {
-      setLabel(place.label)
+      setLabel(place.label.trim().slice(0, MAX_PLACE_NAME))
+      setNameError(false)
       setKind(KINDS.includes(place.kind) ? place.kind : 'OTHER')
     }
   }, [place])
@@ -239,8 +245,11 @@ function EditPlaceSheet({
           disabled={busy || !label.trim()}
           onClick={async () => {
             setBusy(true)
+            setNameError(false)
             try {
-              await onSave(label.trim(), kind)
+              await onSave(label.trim().slice(0, MAX_PLACE_NAME), kind)
+            } catch (err) {
+              if (err instanceof ApiError && err.status === 400) setNameError(true)
             } finally {
               setBusy(false)
             }
@@ -254,7 +263,8 @@ function EditPlaceSheet({
         {place && <p className="muted tiny">{place.formattedAddress || place.address}</p>}
         <label className="stack">
           <span>{t('places.nameLabel')}</span>
-          <input className="sheet-input" value={label} maxLength={60} aria-label={t('places.nameLabel')} onChange={(e) => setLabel(e.target.value)} />
+          <input className="sheet-input" value={label} maxLength={MAX_PLACE_NAME} aria-label={t('places.nameLabel')} aria-invalid={nameError} onChange={(e) => { setLabel(e.target.value); setNameError(false) }} />
+          {nameError && <span className="field-error tiny" role="alert">{t('places.nameInvalid')}</span>}
         </label>
         <KindChips value={kind} onChange={setKind} />
       </div>
