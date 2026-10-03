@@ -228,7 +228,10 @@
     "modeRide": "I ride",
     "groupToday": "Today",
     "groupUpcoming": "Upcoming",
-    "groupPast": "Past"
+    "groupPast": "Past",
+    "giveBackRide": "Give the ride back",
+    "mapAria": "Map of the ride: A is pickup, B is destination",
+    "priority": "Changed ride"
   },
   "admin": {
     "logoutEverywhere": "Log out everywhere",
@@ -393,7 +396,8 @@
     "call": "Call",
     "sms": "SMS",
     "callAria": "Call {{name}}",
-    "smsAria": "Text {{name}}"
+    "smsAria": "Text {{name}}",
+    "callName": "Call {{name}}"
   },
   "lastUpdated": {
     "stale": "Couldn't reach the server – showing the last known information."
@@ -521,5 +525,16 @@
     "choosePickup": "Choose where you are",
     "choosePickupHelp": "We can't find your position. Choose where you are and we'll head home.",
     "retry": "Try again"
+  },
+  "navigate": {
+    "chooseTitle": "Which map do you want to use?",
+    "app": {
+      "apple": "Apple Maps",
+      "google": "Google Maps"
+    },
+    "to": "Navigate to {{place}}",
+    "settingTitle": "Map app",
+    "settingHint": "Which map opens when you tap Navigate",
+    "ask": "Ask next time"
   }
 }

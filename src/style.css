@@ -1695,3 +1695,63 @@ a.link-back {
 .saved-tool:disabled { opacity: 0.35; }
 
 .field-error { color: var(--danger, #b3261e); }
+
+/* M5: driver workflow */
+.mini-map {
+  height: 150px;
+  border-radius: 14px;
+  overflow: hidden;
+  margin: 0.5rem 0;
+  pointer-events: none;
+  background: #1e293b;
+}
+.mini-pin span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 800;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.mini-pin-a span {
+  background: #16a34a;
+}
+.mini-pin-b span {
+  background: #dc2626;
+}
+.driver-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.4rem;
+}
+.badge-priority {
+  background: #2563eb;
+  color: #fff;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+}
+.driver-ride .ride-actions .ui-btn-primary {
+  flex: 1 1 100%;
+}
+.give-back {
+  margin-top: 0.6rem;
+}
+.navigate-slot:empty {
+  display: none;
+}
+.navigate-slot .navigate-btn {
+  min-height: 72px;
+  font-size: 1.35rem;
+}
+.contact-buttons .ui-btn {
+  min-height: 64px;
+  font-size: 1.25rem;
+}
+.driving-mode .ride-messages {
+  font-size: 1.15rem;
+}

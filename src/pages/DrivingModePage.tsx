@@ -4,6 +4,8 @@ import { useRide } from '../lib/useRide'
 import { DRIVER_MESSAGE_CODES, hasAction } from '../lib/rideTypes'
 import { useRideMessages } from '../lib/rideMessages'
 import { formatHm } from '../lib/time'
+import { NavigateButton } from '../components/NavigateButton'
+import { shortPlaceName } from '../lib/navigation'
 import { ContactButtons } from '../components/ContactButtons'
 import { DriverDialogs } from '../components/DriverRideCard'
 import { LastUpdated } from '../components/LastUpdated'
@@ -108,6 +110,8 @@ function DrivingBody({
         </p>
       )}
 
+      <RideMessages messages={messages} isMine={(m) => m.senderId === userId} otherName={first} />
+
       {step && (
         <Button variant="primary" size="huge" block disabled={a.busy} onClick={() => void a.simple(step.path, step.toastKey)}>
           {a.busy ? t('common.working') : t(step.labelKey)}
@@ -119,12 +123,19 @@ function DrivingBody({
         </Button>
       )}
 
-      {/* M5: "Navigera till …" deep-link buttons go here. */}
-      <div className="navigate-slot" data-slot="navigate" />
+      {/* Hand-off to the maps app: the pickup until the passenger is in the car, then the destination. */}
+      <div className="navigate-slot" data-slot="navigate">
+        {!finished && (ride.status === 'EN_ROUTE' || ride.status === 'ARRIVED' || ride.status === 'PICKED_UP') && (
+          <NavigateButton
+            lat={toDestination ? ride.toLat : ride.fromLat}
+            lon={toDestination ? ride.toLon : ride.fromLon}
+            label={t('navigate.to', { place: toDestination ? shortPlaceName(ride.toAddress) : first })}
+          />
+        )}
+      </div>
 
-      {!finished && <ContactButtons phone={ride.passengerPhone} name={first} prefilledSms={t('messages.DRIVER_HERE')} />}
+      {!finished && <ContactButtons phone={ride.passengerPhone} name={first} prefilledSms={t('messages.DRIVER_HERE')} callWithName />}
 
-      <RideMessages messages={messages} isMine={(m) => m.senderId === userId} otherName={first} />
       {hasAction(ride, 'MESSAGE') && (
         <QuickMessages codes={DRIVER_MESSAGE_CODES} large disabled={a.busy} onSend={(c) => void a.sendMessage(c)} />
       )}

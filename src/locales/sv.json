@@ -228,7 +228,10 @@
     "modeRide": "Jag åker",
     "groupToday": "Idag",
     "groupUpcoming": "Kommande",
-    "groupPast": "Tidigare"
+    "groupPast": "Tidigare",
+    "giveBackRide": "Lämna tillbaka resa",
+    "mapAria": "Karta över resan: A är upphämtning, B är målet",
+    "priority": "Ändrad resa"
   },
   "admin": {
     "logoutEverywhere": "Logga ut överallt",
@@ -393,7 +396,8 @@
     "call": "Ring",
     "sms": "SMS",
     "callAria": "Ring {{name}}",
-    "smsAria": "Skicka SMS till {{name}}"
+    "smsAria": "Skicka SMS till {{name}}",
+    "callName": "Ring {{name}}"
   },
   "lastUpdated": {
     "stale": "Kunde inte nå servern – visar senast kända uppgifter."
@@ -521,5 +525,16 @@
     "choosePickup": "Välj var du är",
     "choosePickupHelp": "Vi hittar inte din position. Välj var du är, så åker vi hem.",
     "retry": "Försök igen"
+  },
+  "navigate": {
+    "chooseTitle": "Vilken karta vill du använda?",
+    "app": {
+      "apple": "Apple Kartor",
+      "google": "Google Maps"
+    },
+    "to": "Navigera till {{place}}",
+    "settingTitle": "Kartapp",
+    "settingHint": "Vilken karta öppnas när du trycker Navigera",
+    "ask": "Fråga nästa gång"
   }
 }
