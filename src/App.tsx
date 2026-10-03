@@ -12,6 +12,7 @@ import { useI18n } from './i18n/context'
 import { PendingApproval } from './components/PendingApproval'
 import { schedulePwaInstallPrompt } from './PwaInstallModal'
 import { api, registerPendingApprovalHandler } from './api/client'
+import { clearRideCaches } from './lib/rideCache'
 import {
   REFRESH_AHEAD_MS,
   ensureFreshSession,
@@ -56,6 +57,7 @@ function markSessionExpiredLoginFlash() {
 
 function notifySessionExpiredLogin(setAuth: Dispatch<SetStateAction<AuthResponse | null>>) {
   markSessionExpiredLoginFlash()
+  clearRideCaches()
   setAuth(null)
 }
 
@@ -138,6 +140,7 @@ function ProtectedApp() {
       <PendingApproval
         onRecheck={refreshMe}
         onLogout={async () => {
+          clearRideCaches()
           await logoutRemote(auth.token)
           setAuth(null)
         }}

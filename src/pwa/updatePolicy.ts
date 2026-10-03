@@ -50,7 +50,9 @@ export function bookingDraftInProgress(): boolean {
 export function applyUpdate(): void {
   if (applying || !applyFn) return
   applying = true
-  void applyFn(true)
+  void Promise.resolve(applyFn(true)).catch(() => {
+    applying = false // let the banner tap (or the next window) retry
+  })
 }
 
 export function subscribeUpdate(listener: () => void): () => void {

@@ -23,7 +23,19 @@ type Props = {
   onEdit: (field: BookingEditField) => void
 }
 
-function Row({ label, children, editLabel, onEdit }: { label: string; children: ReactNode; editLabel?: string; onEdit?: () => void }) {
+function Row({
+  label,
+  children,
+  editLabel,
+  editText,
+  onEdit
+}: {
+  label: string
+  children: ReactNode
+  editLabel?: string
+  editText?: string
+  onEdit?: () => void
+}) {
   const { t } = useI18n()
   return (
     <div className="confirm-row">
@@ -33,7 +45,7 @@ function Row({ label, children, editLabel, onEdit }: { label: string; children: 
       </div>
       {onEdit && (
         <button type="button" className="confirm-row-edit" onClick={onEdit} aria-label={editLabel}>
-          {t('bookingConfirm.edit')}
+          {editText ?? t('bookingConfirm.edit')}
         </button>
       )}
     </div>
@@ -57,7 +69,11 @@ export function BookingConfirmSheet({ open, busy, onClose, onConfirm, who, whoPi
       }
     >
       <div className="confirm-rows">
-        <Row label={t('bookingConfirm.who')}>
+        <Row
+          label={t('bookingConfirm.who')}
+          editLabel={whoPicker ? edit('bookingConfirm.who') : undefined}
+          onEdit={whoPicker ? () => onEdit('who') : undefined}
+        >
           {who.forName ? (
             <>
               <strong>{t('bookingConfirm.forName', { name: who.forName })}</strong>
@@ -68,7 +84,12 @@ export function BookingConfirmSheet({ open, busy, onClose, onConfirm, who, whoPi
           )}
           {whoPicker}
         </Row>
-        <Row label={t('bookingConfirm.when')} editLabel={when.now ? undefined : edit('bookingConfirm.when')} onEdit={when.now ? undefined : () => onEdit('when')}>
+        <Row
+          label={t('bookingConfirm.when')}
+          editLabel={when.now ? t('bookingConfirm.chooseTimeAria') : edit('bookingConfirm.when')}
+          editText={when.now ? t('bookingConfirm.chooseTime') : undefined}
+          onEdit={() => onEdit('when')}
+        >
           <strong>{when.now ? t('bookingConfirm.now') : whenText}</strong>
           {when.now && <div className="tiny muted">{whenText}</div>}
         </Row>

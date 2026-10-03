@@ -106,8 +106,7 @@
     "title": "Resan är bokad!",
     "from": "Från:",
     "to": "Till:",
-    "time": "Tid:",
-    "rideId": "Res-ID:"
+    "time": "Tid:"
   },
   "rides": {
     "backToBooking": "Tillbaka till bokning",
@@ -203,6 +202,9 @@
     "toastReturned": "Resan är tillbaka i kön.",
     "availabilityTitle": "Tillgänglighet",
     "availableNow": "Tillgänglig nu",
+    "notAvailable": "Inte tillgänglig",
+    "awaySummary": "Bortrest?",
+    "awayActive": "Bortrest – ändra datum",
     "awayTitle": "Bortrest (valfritt)",
     "awayFrom": "Från",
     "awayUntil": "Till",
@@ -378,10 +380,11 @@
       "CANCELLED": "Resan är avbokad",
       "UNKNOWN": "Din resa"
     },
-    "gone": "Den här resan finns inte längre.",
+    "gone": "Resan finns inte längre.",
     "unreachable": "Kunde inte nå servern. Försök igen om en stund.",
     "toHome": "Till start",
     "bookNew": "Boka ny resa",
+    "bookAnother": "Boka en till resa",
     "open": "Öppna resan"
   },
   "contact": {
@@ -404,6 +407,8 @@
     "now": "Nu – så snart en förare tackar ja",
     "edit": "Ändra",
     "editAria": "Ändra {{what}}",
+    "chooseTime": "Välj tid",
+    "chooseTimeAria": "Välj en annan tid (förboka)",
     "forName": "För {{name}}",
     "bookedBy": "Bokas av {{name}}",
     "confirmNow": "Ja, boka nu",

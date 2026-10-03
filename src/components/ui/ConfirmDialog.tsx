@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { Button } from './Button'
 import { useOverlayOpen } from './overlayRegistry'
+import { useModalFocus } from './useModalFocus'
 
 type Props = {
   open: boolean
@@ -30,7 +31,9 @@ export function ConfirmDialog({
   danger,
   children
 }: Props) {
+  const ref = useRef<HTMLDivElement>(null)
   useOverlayOpen(open)
+  useModalFocus(open, onCancel, ref)
   if (!open) return null
   return (
     <div
@@ -42,7 +45,7 @@ export function ConfirmDialog({
         if (e.target === e.currentTarget) onCancel()
       }}
     >
-      <div className="card install-modal-card" onClick={(e) => e.stopPropagation()}>
+      <div ref={ref} tabIndex={-1} className="card install-modal-card" onClick={(e) => e.stopPropagation()}>
         <h3>{title}</h3>
         {body && <p className="install-modal-lead">{body}</p>}
         {children}

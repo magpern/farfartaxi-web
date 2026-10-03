@@ -24,7 +24,7 @@ function DrivingScreen({ id }: { id: string | undefined }) {
   const { token, user, onToast } = useShell()
   const navigate = useNavigate()
   const { refresh: refreshActive } = useActiveRide()
-  const { ride, lastUpdated, failed, gone, loading, refresh } = useRide(id, token)
+  const { ride, lastUpdated, failed, gone, loading, refresh } = useRide(id, token, user.id)
 
   const onChanged = async () => {
     await refresh()

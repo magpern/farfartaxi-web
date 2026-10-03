@@ -57,6 +57,8 @@ export type RideResponse = {
   offerPriority?: boolean | null
   myOfferStatus?: string | null
   availableActions?: RideAction[] | null
+  /** The caller already rated this ride (missing = not rated). */
+  feedbackGiven?: boolean | null
 }
 
 export function hasAction(ride: RideResponse, action: RideAction): boolean {

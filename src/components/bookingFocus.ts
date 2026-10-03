@@ -9,7 +9,9 @@ export function focusBookingField(field: BookingEditField) {
         ? 'input[data-booking-field="to"]'
         : field === 'note'
           ? '.pickup-note-field textarea'
-          : null
+          : field === 'who'
+            ? '.confirm-picker'
+            : null
   if (!selector) return
   window.setTimeout(() => document.querySelector<HTMLElement>(selector)?.focus(), 50)
 }

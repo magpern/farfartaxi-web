@@ -57,7 +57,8 @@ async function send(url: string, opts: ApiOpts, token: string | undefined): Prom
       body: opts.body,
       signal: controller.signal
     })
-    setBackendUnreachable(false)
+    // 502/503/504 come from the reverse proxy while the backend restarts: treat as unreachable.
+    setBackendUnreachable(response.status === 502 || response.status === 503 || response.status === 504)
     return response
   } catch {
     setBackendUnreachable(true)
@@ -78,7 +79,24 @@ async function sendWithRetry(url: string, opts: ApiOpts, token: string | undefin
   }
 }
 
+let inFlightMutations = 0
+/** Number of non-GET api() calls currently in flight; the PWA update guard must not reload while > 0. */
+export function getInFlightMutations(): number {
+  return inFlightMutations
+}
+
 export async function api<T = unknown>(path: string, opts: ApiOpts = {}): Promise<T> {
+  const isMutation = (opts.method ?? 'GET').toUpperCase() !== 'GET'
+  if (!isMutation) return apiInner<T>(path, opts)
+  inFlightMutations += 1
+  try {
+    return await apiInner<T>(path, opts)
+  } finally {
+    inFlightMutations -= 1
+  }
+}
+
+async function apiInner<T>(path: string, opts: ApiOpts): Promise<T> {
   const url = path.startsWith('http') ? path : `${API_URL}${path}`
   let response = await sendWithRetry(url, opts, opts.token)
 

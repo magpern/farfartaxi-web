@@ -2,10 +2,10 @@ import { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useI18n } from '../i18n/context'
 import type { RideResponse } from '../lib/rideTypes'
-import { formatYmdHm } from '../lib/time'
+import { formatWeekdayDateTime } from '../lib/time'
 
 export function BookingConfirmPage() {
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const navigate = useNavigate()
   const { state } = useLocation()
   const ride = (state as { ride?: RideResponse } | null)?.ride
@@ -27,10 +27,7 @@ export function BookingConfirmPage() {
           <strong>{t('confirm.to')}</strong> {ride.toAddress}
         </p>
         <p>
-          <strong>{t('confirm.time')}</strong> {formatYmdHm(ride.scheduledAt)}
-        </p>
-        <p className="tiny">
-          {t('confirm.rideId')} {ride.id}
+          <strong>{t('confirm.time')}</strong> {formatWeekdayDateTime(ride.scheduledAt, locale === 'en' ? 'en-GB' : 'sv-SE')}
         </p>
       </div>
       <button type="button" className="btn btn-primary" onClick={() => navigate('/app')}>

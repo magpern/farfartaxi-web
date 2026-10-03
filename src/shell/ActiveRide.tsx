@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useLocation, useNavigate } from 'react-router-dom'
 import { api } from '../api/client'
 import type { ActiveRideResponse } from '../lib/rideTypes'
-import { decideActiveRideRedirect, isHomePath, readActivePointer, writeActivePointer } from './activeRide'
+import { decideActiveRideRedirect, isHomePath, readActivePointer, sameActive, writeActivePointer } from './activeRide'
 
 type Value = {
   /** The caller's active ride (with the role it applies to), or null. */
@@ -39,7 +39,7 @@ export function ActiveRideProvider({ token, userId, children }: { token: string;
 
   const apply = useCallback(
     (next: ActiveRideResponse | null) => {
-      setActive(next)
+      setActive((prev) => (sameActive(prev, next) ? prev : next))
       setLoaded(true)
       const target = decideActiveRideRedirect({ active: next, pathname: pathRef.current, armed: armed.current })
       if (armed.current && isHomePath(pathRef.current)) armed.current = false
@@ -81,9 +81,17 @@ export function ActiveRideProvider({ token, userId, children }: { token: string;
       }
       if (hiddenAt.current !== null && Date.now() - hiddenAt.current > RESUME_AFTER_MS) armed.current = true
       hiddenAt.current = null
+      lastFocusRefresh = Date.now() // the focus event that usually follows must not refresh a second time
       void refresh()
     }
-    const onFocus = () => void refresh()
+    // visibilitychange covers returning to the app; `focus` only matters on desktop where the tab stays visible.
+    let lastFocusRefresh = 0
+    const onFocus = () => {
+      const now = Date.now()
+      if (now - lastFocusRefresh < 1000) return
+      lastFocusRefresh = now
+      if (document.visibilityState === 'visible') void refresh()
+    }
     document.addEventListener('visibilitychange', onVis)
     window.addEventListener('focus', onFocus)
     return () => {

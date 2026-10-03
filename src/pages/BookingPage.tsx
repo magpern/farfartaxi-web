@@ -439,7 +439,15 @@ export function BookingPage() {
   }
 
   function editFromSheet(field: BookingEditField) {
+    if (field === 'who') {
+      focusBookingField(field) // the passenger picker lives inside the sheet: keep it open
+      return
+    }
     setSheetOpen(false)
+    if (field === 'when') {
+      navigate('/app/forboka') // "Nu" -> choose a time (Förboka)
+      return
+    }
     focusBookingField(field)
   }
 

@@ -5,19 +5,21 @@ import { useI18n } from '../i18n/context'
 import { groupDriverRides } from '../lib/rideGroups'
 import { DRIVING_STATUSES, type RideResponse } from '../lib/rideTypes'
 import { ActiveRideCard } from '../components/ActiveRideCard'
-import { DriverAvailability } from '../components/DriverAvailability'
+import { AvailabilityToggle, AwayDates } from '../components/DriverAvailability'
+import { useAvailability } from '../lib/useAvailability'
 import { DriverRideCard } from '../components/DriverRideCard'
 import { LastUpdated } from '../components/LastUpdated'
 import { Button, Card } from '../components/ui'
 import { useActiveRide } from '../shell/ActiveRide'
 import { useShell } from '../shell/ShellContext'
 
-/** Driver home: availability, ride in progress / next ride, new requests (urgent first), today's rides. */
+/** Driver home: availability toggle, ride in progress / next ride, new requests (urgent first), today's rides, away dates. */
 export function DriverHomePage() {
   const { t } = useI18n()
   const { token, user, onToast } = useShell()
   const navigate = useNavigate()
   const { active, refresh: refreshActive } = useActiveRide()
+  const availability = useAvailability(token, onToast)
   const [mine, setMine] = useState<RideResponse[]>([])
   const [open, setOpen] = useState<RideResponse[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -67,6 +69,7 @@ export function DriverHomePage() {
 
   return (
     <div className="subpage-wrap stack driver-home">
+      <AvailabilityToggle state={availability} />
       <h1 className="page-title">{t('tabs.requests')}</h1>
 
       {driverActive && (
@@ -82,8 +85,6 @@ export function DriverHomePage() {
           onOpen={() => navigate(`/app/forare/kor/${driverActive.id}`)}
         />
       )}
-
-      <DriverAvailability token={token} onToast={onToast} />
 
       <Card>
         <h2 className="section-title">{t('driver.openRides')}</h2>
@@ -116,6 +117,8 @@ export function DriverHomePage() {
       <Button size="lg" block onClick={() => navigate('/app/boka')}>
         {t('driver.bookRide')}
       </Button>
+
+      <AwayDates state={availability} />
 
       <LastUpdated at={lastUpdated} failed={failed} />
     </div>

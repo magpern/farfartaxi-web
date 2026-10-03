@@ -106,8 +106,7 @@
     "title": "Trip booked!",
     "from": "From:",
     "to": "To:",
-    "time": "Time:",
-    "rideId": "Trip ID:"
+    "time": "Time:"
   },
   "rides": {
     "backToBooking": "Back to booking",
@@ -203,6 +202,9 @@
     "toastReturned": "The ride is back in the queue.",
     "availabilityTitle": "Availability",
     "availableNow": "Available now",
+    "notAvailable": "Not available",
+    "awaySummary": "Away?",
+    "awayActive": "Away – change dates",
     "awayTitle": "Away (optional)",
     "awayFrom": "From",
     "awayUntil": "Until",
@@ -382,6 +384,7 @@
     "unreachable": "Couldn't reach the server. Try again in a moment.",
     "toHome": "Go to start",
     "bookNew": "Book a new ride",
+    "bookAnother": "Book another ride",
     "open": "Open the ride"
   },
   "contact": {
@@ -404,6 +407,8 @@
     "now": "Now – as soon as a driver says yes",
     "edit": "Change",
     "editAria": "Change {{what}}",
+    "chooseTime": "Choose time",
+    "chooseTimeAria": "Choose another time (pre-book)",
     "forName": "For {{name}}",
     "bookedBy": "Booked by {{name}}",
     "confirmNow": "Yes, book now",

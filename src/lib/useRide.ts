@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api/client'
-import { cacheRide, readCachedRide } from './rideCache'
+import { cacheRide, forgetCachedRide, readCachedRide } from './rideCache'
 import type { RideResponse } from './rideTypes'
 
 export type RideState = {
@@ -19,9 +19,9 @@ export type RideState = {
  * One ride, polled every `intervalMs` while the page is visible and refreshed on visibilitychange / reconnect.
  * Starts from the localStorage snapshot so the screen (and Ring/SMS) works with no connection.
  */
-export function useRide(id: string | number | undefined, token: string, intervalMs = 5000): RideState {
+export function useRide(id: string | number | undefined, token: string, userId: number, intervalMs = 5000): RideState {
   const [state, setState] = useState<Omit<RideState, 'refresh'>>(() => {
-    const cached = id != null ? readCachedRide(id) : null
+    const cached = id != null ? readCachedRide(userId, id) : null
     return { ride: cached?.ride ?? null, lastUpdated: cached?.savedAt ?? null, failed: false, gone: false, loading: true }
   })
   const alive = useRef(true)
@@ -31,17 +31,19 @@ export function useRide(id: string | number | undefined, token: string, interval
     try {
       const ride = await api<RideResponse>(`/api/rides/${id}`, { token })
       if (!alive.current) return
-      cacheRide(ride)
+      cacheRide(userId, ride)
       setState({ ride, lastUpdated: Date.now(), failed: false, gone: false, loading: false })
     } catch (err) {
       if (!alive.current) return
       if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
-        setState((s) => ({ ...s, gone: true, loading: false, failed: false }))
+        // The server says it is not (or no longer) ours: never present the cached copy as current.
+        forgetCachedRide(userId, id)
+        setState({ ride: null, lastUpdated: null, gone: true, loading: false, failed: false })
       } else {
         setState((s) => ({ ...s, failed: true, loading: false }))
       }
     }
-  }, [id, token])
+  }, [id, token, userId])
 
   useEffect(() => {
     alive.current = true

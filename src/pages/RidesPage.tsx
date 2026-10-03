@@ -9,6 +9,7 @@ import { formatWeekdayDateTime } from '../lib/time'
 import { PassengerRideCard } from '../components/PassengerRideCard'
 import { RatingSheet } from '../components/RatingSheet'
 import { Button, Card, StatusPill } from '../components/ui'
+import { pollWhileVisible } from '../lib/pollWhileVisible'
 import { useShell } from '../shell/ShellContext'
 
 /** Compact row for a finished ride. */
@@ -35,7 +36,7 @@ export function PastRideRow({
         {ride.fromAddress} {t('rides.toWord')} {ride.toAddress}
       </p>
       <div className="row ride-actions">
-        {onRate && ride.status === 'COMPLETED' && <Button onClick={() => onRate(ride.id)}>{t('rating.cta')}</Button>}
+        {onRate && ride.status === 'COMPLETED' && !ride.feedbackGiven && <Button onClick={() => onRate(ride.id)}>{t('rating.cta')}</Button>}
         {onDelete && ride.status === 'CANCELLED' && (
           <Button variant="danger" onClick={() => onDelete(ride.id)}>
             {t('rides.delete')}
@@ -78,8 +79,7 @@ export function RidesPage() {
 
   useEffect(() => {
     void load()
-    const id = window.setInterval(() => void load(), 15000)
-    return () => window.clearInterval(id)
+    return pollWhileVisible(load, 15000)
   }, [load])
 
   const groups = useMemo(() => groupPassengerRides(rides ?? []), [rides])
@@ -149,6 +149,7 @@ export function RidesPage() {
               token,
               body: JSON.stringify({ stars, comment: comment || undefined })
             })
+            setRides((rs) => rs && rs.map((r) => (r.id === rateId ? { ...r, feedbackGiven: true } : r)))
             onToast(t('rides.feedbackThanksToast'))
           } catch (err) {
             onToast(apiErrorMessage(err, t))

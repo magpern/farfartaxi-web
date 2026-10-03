@@ -114,4 +114,16 @@ describe('update policy', () => {
     act(() => setHidden(false))
     expect(update).toHaveBeenCalledTimes(2)
   })
+
+  it('resets applying when updateSW rejects so a later tap can retry', async () => {
+    updateSW.mockRejectedValueOnce(new Error('boom'))
+    renderBanner()
+    lateUpdate()
+    fireEvent.click(screen.getByRole('button', { name: 'Uppdatera' }))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Uppdatera' }))
+    expect(updateSW).toHaveBeenCalledTimes(2)
+  })
 })

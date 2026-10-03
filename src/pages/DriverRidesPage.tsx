@@ -6,6 +6,7 @@ import { groupDriverRides } from '../lib/rideGroups'
 import type { RideResponse } from '../lib/rideTypes'
 import { DriverRideCard } from '../components/DriverRideCard'
 import { Button } from '../components/ui'
+import { pollWhileVisible } from '../lib/pollWhileVisible'
 import { useShell } from '../shell/ShellContext'
 import { PastRideRow, RidesPage, Section } from './RidesPage'
 
@@ -52,8 +53,7 @@ function DriverRidesList() {
 
   useEffect(() => {
     void load()
-    const id = window.setInterval(() => void load(), 15000)
-    return () => window.clearInterval(id)
+    return pollWhileVisible(load, 15000)
   }, [load])
 
   const groups = useMemo(() => groupDriverRides(mine ?? [], history), [mine, history])

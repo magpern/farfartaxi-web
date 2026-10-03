@@ -9,6 +9,7 @@ import {
   writeBookingDraftToStorage,
   type BookingDraft
 } from '../lib/bookingDraft'
+import { claimRideCacheFor, clearRideCaches } from '../lib/rideCache'
 import { logoutRemote } from '../lib/session'
 import { useDriverTracking } from '../lib/useDriverTracking'
 import { AdminPage } from '../pages/AdminPage'
@@ -44,6 +45,9 @@ export function AppShell({
 }) {
   useSessionKeepAlive()
   const { user, token } = auth
+  // Before any child reads the ride cache: wipe it if it belongs to another user (runs again when the id changes).
+  useState(() => claimRideCacheFor(user.id))
+  useEffect(() => claimRideCacheFor(user.id), [user.id])
   const [toast, setToast] = useState('')
   const [pwaInstallOpen, setPwaInstallOpen] = useState(false)
   const [draft, setDraft] = useState<BookingDraft>(() => readBookingDraftFromStorage() ?? defaultDraft)
@@ -79,6 +83,7 @@ export function AppShell({
     } catch {
       /* ignore */
     }
+    clearRideCaches()
     await logoutRemote(token)
     setAuth(null)
   }, [token, setAuth])
@@ -101,7 +106,7 @@ export function AppShell({
     <ShellContext.Provider value={shellValue}>
       <BookingDraftContext.Provider value={draftValue}>
         <ActiveRideProvider token={token} userId={user.id}>
-          <ShellFrame draft={draft} role={user.role} token={token} toast={toast} onToastGone={clearToast}>
+          <ShellFrame draft={draft} userId={user.id} role={user.role} token={token} toast={toast} onToastGone={clearToast}>
             <PwaInstallModal open={pwaInstallOpen} onClose={() => setPwaInstallOpen(false)} />
             <AppRoutes role={user.role} />
           </ShellFrame>
@@ -113,6 +118,7 @@ export function AppShell({
 
 function ShellFrame({
   draft,
+  userId,
   role,
   token,
   toast,
@@ -120,6 +126,7 @@ function ShellFrame({
   children
 }: {
   draft: BookingDraft
+  userId: number
   role: AuthResponse['user']['role']
   token: string
   toast: string
@@ -127,7 +134,7 @@ function ShellFrame({
   children: React.ReactNode
 }) {
   const { active } = useActiveRide()
-  useUpdateGuard(active !== null, draft)
+  useUpdateGuard(active !== null, draft, userId)
   // GPS follows the driver's ride status from anywhere in the app, not only on one screen.
   useDriverTracking(token, active?.role === 'DRIVER' ? [active.ride] : [])
   return (

@@ -1,7 +1,7 @@
 import { act, render, renderHook, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../../i18n/context'
-import { ApiError, api } from '../../api/client'
+import { ApiError, api, getInFlightMutations } from '../../api/client'
 import { NetworkBanner, formatLastUpdated, useOnline } from './index'
 import { setBackendUnreachable } from './state'
 
@@ -48,6 +48,36 @@ describe('useOnline', () => {
       await api('/api/x')
     })
     expect(result.current).toBe(true)
+  })
+})
+
+describe('api() proxy errors and mutation counter', () => {
+  it.each([502, 503, 504])('HTTP %i marks the backend unreachable, a later 200 clears it', async (status) => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response('', { status })).mockResolvedValue(ok()))
+    const { result } = renderHook(() => useOnline())
+    await act(async () => {
+      await expect(api('/api/x')).rejects.toMatchObject({ status })
+    })
+    expect(result.current).toBe(false)
+    await act(async () => {
+      await api('/api/x')
+    })
+    expect(result.current).toBe(true)
+  })
+
+  it('counts in-flight non-GET calls only', async () => {
+    let release: (r: Response) => void = () => {}
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => new Promise<Response>((r) => (release = r))))
+    expect(getInFlightMutations()).toBe(0)
+    const p = api('/api/x', { method: 'POST' })
+    expect(getInFlightMutations()).toBe(1)
+    release(ok())
+    await p
+    expect(getInFlightMutations()).toBe(0)
+    const g = api('/api/x')
+    expect(getInFlightMutations()).toBe(0)
+    release(ok())
+    await g
   })
 })
 

@@ -30,8 +30,9 @@ function ActiveRideScreen({ id }: { id: string | undefined }) {
   const { token, user, onToast } = useShell()
   const navigate = useNavigate()
   const { refresh: refreshActive } = useActiveRide()
-  const { ride, lastUpdated, failed, gone, loading, refresh } = useRide(id, token)
+  const { ride, lastUpdated, failed, gone, loading, refresh } = useRide(id, token, user.id)
   const [rating, setRating] = useState(false)
+  const [rated, setRated] = useState(false)
 
   if (!ride) {
     return (
@@ -60,6 +61,7 @@ function ActiveRideScreen({ id }: { id: string | undefined }) {
         locale={locale}
         onToast={onToast}
         onChanged={onChanged}
+        canRate={!ride.feedbackGiven && !rated}
         onRate={() => setRating(true)}
         onHome={() => navigate(bookPath(user.role))}
       />
@@ -74,6 +76,7 @@ function ActiveRideScreen({ id }: { id: string | undefined }) {
               token,
               body: JSON.stringify({ stars, comment: comment || undefined })
             })
+            setRated(true)
             onToast(t('rides.feedbackThanksToast'))
           } catch (err) {
             onToast(apiErrorMessage(err, t))
@@ -92,6 +95,7 @@ function RideBody({
   locale,
   onToast,
   onChanged,
+  canRate,
   onRate,
   onHome
 }: {
@@ -101,6 +105,7 @@ function RideBody({
   locale: string
   onToast: (m: string) => void
   onChanged: () => Promise<void>
+  canRate: boolean
   onRate: () => void
   onHome: () => void
 }) {
@@ -175,7 +180,7 @@ function RideBody({
             {t('rides.cancel')}
           </Button>
         )}
-        {ride.status === 'COMPLETED' && (
+        {ride.status === 'COMPLETED' && canRate && (
           <Button variant="primary" size="lg" block onClick={onRate}>
             {t('rating.cta')}
           </Button>

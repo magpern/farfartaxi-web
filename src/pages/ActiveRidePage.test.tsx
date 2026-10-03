@@ -1,7 +1,8 @@
 import { screen, waitFor } from '@testing-library/react'
 import { Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { cacheRide } from '../lib/rideCache'
+import { ApiError } from '../api/client'
+import { cacheRide, readCachedRide } from '../lib/rideCache'
 import { renderApp, ride } from '../test/render'
 import { ActiveRidePage } from './ActiveRidePage'
 
@@ -47,7 +48,7 @@ describe('passenger ride screen', () => {
   })
 
   it('keeps Ring and SMS working from the cache when the backend cannot be reached', async () => {
-    cacheRide(accepted)
+    cacheRide(1, accepted)
     apiMock.mockRejectedValue(new TypeError('Failed to fetch'))
     show()
     expect(screen.getByRole('link', { name: 'Ring Folke' })).toHaveAttribute('href', 'tel:0701234567')
@@ -62,10 +63,34 @@ describe('passenger ride screen', () => {
     expect(await screen.findByText(/Kunde inte nå servern/)).toBeInTheDocument()
   })
 
+  it('shows the friendly gone state, not stale cache, when the server answers 404', async () => {
+    cacheRide(1, accepted)
+    apiMock.mockRejectedValue(new ApiError('nope', 404))
+    show()
+    expect(await screen.findByText(/Resan finns inte längre/)).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Ring Folke' })).toBeNull()
+    expect(readCachedRide(1, 7)).toBeNull()
+  })
+
   it('offers actions from availableActions only', async () => {
     apiMock.mockImplementation((path: string) => (path === '/api/rides/7' ? Promise.resolve(accepted) : Promise.resolve([])))
     show()
     expect(await screen.findByRole('button', { name: 'Avboka' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Fortsätt vänta' })).toBeNull()
+  })
+
+  it('offers rating on a completed ride only when feedback is not given yet', async () => {
+    const done = { ...accepted, status: 'COMPLETED', availableActions: [] as never[] }
+    apiMock.mockImplementation((path: string) => (path === '/api/rides/7' ? Promise.resolve(done) : Promise.resolve([])))
+    show()
+    expect(await screen.findByRole('button', { name: 'Betygsätt resan' })).toBeInTheDocument()
+  })
+
+  it('hides rating when feedbackGiven is true', async () => {
+    const done = { ...accepted, status: 'COMPLETED', availableActions: [] as never[], feedbackGiven: true }
+    apiMock.mockImplementation((path: string) => (path === '/api/rides/7' ? Promise.resolve(done) : Promise.resolve([])))
+    show()
+    expect(await screen.findByRole('button', { name: 'Boka ny resa' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Betygsätt resan' })).toBeNull()
   })
 })

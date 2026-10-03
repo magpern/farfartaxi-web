@@ -59,3 +59,10 @@ export function readActivePointer(userId: number, now = Date.now()): { role: 'PA
     return null
   }
 }
+
+/** True when nothing a consumer renders has changed (avoids re-rendering every poll). */
+export function sameActive(a: ActiveRideResponse | null, b: ActiveRideResponse | null): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return a.role === b.role && JSON.stringify(a.ride) === JSON.stringify(b.ride)
+}

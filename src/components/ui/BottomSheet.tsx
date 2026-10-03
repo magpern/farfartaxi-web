@@ -1,6 +1,7 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { useI18n } from '../../i18n/context'
 import { useOverlayOpen } from './overlayRegistry'
+import { useModalFocus } from './useModalFocus'
 
 type Props = {
   open: boolean
@@ -15,15 +16,7 @@ export function BottomSheet({ open, title, onClose, children, footer }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   useOverlayOpen(open)
 
-  useEffect(() => {
-    if (!open) return
-    ref.current?.focus()
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  useModalFocus(open, onClose, ref)
 
   if (!open) return null
   return (

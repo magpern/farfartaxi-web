@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ride } from '../test/render'
-import { activeRideTarget, decideActiveRideRedirect, isHomePath, readActivePointer, writeActivePointer } from './activeRide'
+import { activeRideTarget, decideActiveRideRedirect, isHomePath, readActivePointer, sameActive, writeActivePointer } from './activeRide'
 
 const passenger = (status = 'REQUESTED') => ({ role: 'PASSENGER' as const, ride: ride(status) })
 const driver = (status: string) => ({ role: 'DRIVER' as const, ride: ride(status) })
@@ -44,5 +44,15 @@ describe('active pointer (offline cold start)', () => {
     expect(readActivePointer(5, Date.now() + 7 * 3600_000)).toBeNull()
     writeActivePointer(5, null)
     expect(readActivePointer(5)).toBeNull()
+  })
+})
+
+describe('sameActive', () => {
+  it('is true for structurally equal rides and false when a field changes', () => {
+    const a = { role: 'PASSENGER' as const, ride: ride('ACCEPTED') }
+    expect(sameActive(a, { role: 'PASSENGER', ride: ride('ACCEPTED') })).toBe(true)
+    expect(sameActive(a, { role: 'PASSENGER', ride: ride('EN_ROUTE') })).toBe(false)
+    expect(sameActive(a, null)).toBe(false)
+    expect(sameActive(null, null)).toBe(true)
   })
 })
