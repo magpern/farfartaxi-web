@@ -457,7 +457,7 @@ export function BookingPage() {
     const d = draftRef.current
     if (d.fromAddress !== t('placeSearch.myPosition')) return true
     const { fromLat: lat, fromLon: lon } = d
-    let label: string | null = null
+    let label: string | null
     try {
       label = (await reversePlace(token, lat, lon))?.formattedAddress || null
     } catch {
