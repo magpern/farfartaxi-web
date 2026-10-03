@@ -12,9 +12,11 @@ type Props = {
   activeIndex: number
   onPick: (p: PlaceResult) => void
   onShowMore: () => void
+  /** Optional "⭐ Spara" action per result. */
+  onSave?: (p: PlaceResult) => void
 }
 
-export function PlaceResultList({ id, results, status, hasMore, expanded, activeIndex, onPick, onShowMore }: Props) {
+export function PlaceResultList({ id, results, status, hasMore, expanded, activeIndex, onPick, onShowMore, onSave }: Props) {
   const { t } = useI18n()
   return (
     <div className="place-results">
@@ -39,6 +41,20 @@ export function PlaceResultList({ id, results, status, hasMore, expanded, active
                 {p.area && <span className="place-area">{p.area}</span>}
               </span>
               {p.distanceKm != null && <span className="place-dist">{formatDistance(p.distanceKm)}</span>}
+              {onSave && p.kind !== 'FAVORITE' && (
+                <button
+                  type="button"
+                  className="place-save"
+                  aria-label={t('places.saveAria', { name: p.name })}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onSave(p)
+                  }}
+                >
+                  ⭐ {t('places.save')}
+                </button>
+              )}
             </li>
           ))}
         </ul>

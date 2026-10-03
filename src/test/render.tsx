@@ -25,7 +25,7 @@ export function ride(status: string, actions: RideAction[] = [], extra: Partial<
   }
 }
 
-export function renderApp(ui: ReactElement, opts: { path?: string; role?: Role; shell?: Partial<ShellValue> } = {}) {
+export function renderApp(ui: ReactElement, opts: { path?: string; state?: unknown; role?: Role; shell?: Partial<ShellValue> } = {}) {
   localStorage.setItem('farfartaxi-locale', 'sv')
   const shell: ShellValue = {
     user: user(opts.role),
@@ -41,7 +41,7 @@ export function renderApp(ui: ReactElement, opts: { path?: string; role?: Role; 
   return render(
     <I18nProvider>
       <ShellContext.Provider value={shell}>
-        <MemoryRouter initialEntries={[opts.path ?? '/app']}>{ui}</MemoryRouter>
+        <MemoryRouter initialEntries={[opts.state !== undefined ? { pathname: opts.path ?? '/app', state: opts.state } : (opts.path ?? '/app')]}>{ui}</MemoryRouter>
       </ShellContext.Provider>
     </I18nProvider>
   )

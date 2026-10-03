@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useI18n } from '../i18n/context'
@@ -22,6 +22,12 @@ import { isDriverRole } from '../shell/types'
 import { BookingConfirmSheet, PassengerPicker } from '../components/BookingConfirmSheet'
 import { focusBookingField, type BookingEditField } from '../components/bookingFocus'
 import { useBookingUsers } from '../lib/useBookingUsers'
+import { useRecentPlaces, useSavedPlaces } from '../lib/useSavedPlaces'
+import { draftFromResult, type PlaceDraft } from '../api/savedPlaces'
+import { HomeShortcuts } from '../components/HomeShortcuts'
+import { SavePlaceSheet } from '../components/SavePlaceSheet'
+import { BottomSheet } from '../components/ui/BottomSheet'
+import { Button } from '../components/ui/Button'
 
 const MAX_PICKUP_ACCURACY_M = 1000
 const isAccurateFix = (accuracy: number | undefined) =>
@@ -53,9 +59,15 @@ export function BookingPage() {
   const tRef = useRef(t)
   tRef.current = t
   const navigate = useNavigate()
+  const location = useLocation()
   const { draft, setDraft, clearBookingDraft } = useBookingDraft()
   const isDriver = isDriverRole(currentUser.role)
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [whenOpen, setWhenOpen] = useState(false)
+  const [toSave, setToSave] = useState<PlaceDraft | null>(null)
+  const { places: savedPlaces, reload: reloadSaved } = useSavedPlaces(token)
+  const recents = useRecentPlaces(token)
+  const homePlace = savedPlaces?.find((p) => p.kind === 'HOME') ?? null
   const { busy: booking, run: runBooking } = useBusy()
   const idempotency = useRef(createIdempotencyHolder())
   const bookingUsers = useBookingUsers(token, isDriver && sheetOpen)
@@ -524,6 +536,37 @@ export function BookingPage() {
     void resolveThen(() => setSheetOpen(true))
   }
 
+  /** Favourite / recent / home: one tap fills the destination. */
+  function fillDestination(p: { label: string; address: string; lat: number; lon: number }) {
+    applySearchResult(
+      { provider: 'FAVORITE', providerPlaceId: null, kind: 'FAVORITE', name: p.label, area: null, formattedAddress: p.address, lat: p.lat, lon: p.lon, distanceKm: null },
+      'to'
+    )
+  }
+
+  function goHome() {
+    if (!homePlace) {
+      navigate('/app/platser?add=HOME')
+      return
+    }
+    fillDestination({ label: homePlace.label, address: homePlace.formattedAddress || homePlace.address, lat: homePlace.lat, lon: homePlace.lon })
+    if (!draftRef.current.fromAddress.trim()) {
+      onToast(t('home.needPickup'))
+      focusBookingField('from')
+      return
+    }
+    setWhenOpen(true)
+  }
+
+  // "Boka igen" arrives here with a filled draft and asks for the Nu / Välj tid step.
+  const wantsWhen = (location.state as { step?: string } | null)?.step === 'when'
+  const whenAsked = useRef(false)
+  useEffect(() => {
+    if (!wantsWhen || whenAsked.current) return
+    whenAsked.current = true
+    if (draftRef.current.fromAddress.trim() && draftRef.current.toAddress.trim()) setWhenOpen(true)
+  }, [wantsWhen])
+
   function editFromSheet(field: BookingEditField) {
     if (field === 'who') {
       focusBookingField(field) // the passenger picker lives inside the sheet: keep it open
@@ -547,7 +590,16 @@ export function BookingPage() {
         <div ref={mapNode} className="map map-hero-map" />
       </div>
       <div className="booking-sheet">
-        <h2 className="sheet-title">{t('booking.planTrip')}</h2>
+        <h2 className="sheet-title">{t('home.title')}</h2>
+        <HomeShortcuts
+          places={savedPlaces ?? []}
+          recents={recents}
+          hasHome={homePlace !== null}
+          disabled={booking || resolving}
+          onGoHome={goHome}
+          onPlace={(p) => fillDestination({ label: p.label, address: p.formattedAddress || p.address, lat: p.lat, lon: p.lon })}
+          onRecent={(p) => applySearchResult(p, 'to')}
+        />
         <div className="address-flow">
           <div className="address-line" aria-hidden />
           <div className="address-fields">
@@ -600,6 +652,7 @@ export function BookingPage() {
                 setDraft((d) => ({ ...d, toAddress: v }))
               }}
               onSelect={(p) => applySearchResult(p, 'to')}
+              onSave={(p) => setToSave(draftFromResult(p))}
               onClear={() => clearField('to')}
             />
           </div>
@@ -610,6 +663,13 @@ export function BookingPage() {
             : t('booking.distanceKm', { km: distanceKm.toFixed(2) })}
         </p>
         {roadRoute && <p className="dist-hint dist-hint-sub">{t('booking.routingAttribution')}</p>}
+        {isDriver && (
+          <p className="tiny">
+            <Link to={draft.passengerUserId != null ? `/app/platser?userId=${draft.passengerUserId}` : '/app/platser'}>
+              {t('places.forPlaces')}
+            </Link>
+          </p>
+        )}
         <PickupNoteField
           value={draft.pickupNote ?? ''}
           onChange={(v) => setDraft((d) => ({ ...d, pickupNote: v }))}
@@ -623,6 +683,42 @@ export function BookingPage() {
           </button>
         </div>
       </div>
+      <BottomSheet open={whenOpen} title={t('home.whenTitle')} onClose={() => setWhenOpen(false)}>
+        <div className="stack">
+          <p className="muted">{t('home.route', { from: draft.fromIsGps ? t('placeSearch.myPosition') : draft.fromAddress, to: draft.toAddress })}</p>
+          <Button
+            variant="primary"
+            size="lg"
+            block
+            disabled={resolving}
+            onClick={() => {
+              setWhenOpen(false)
+              bookAkaNu()
+            }}
+          >
+            {t('home.now')}
+          </Button>
+          <Button
+            size="lg"
+            block
+            disabled={resolving}
+            onClick={() => {
+              setWhenOpen(false)
+              goForboka()
+            }}
+          >
+            {t('home.pickTime')}
+          </Button>
+        </div>
+      </BottomSheet>
+      <SavePlaceSheet
+        open={toSave !== null}
+        place={toSave}
+        token={token}
+        onClose={() => setToSave(null)}
+        onSaved={() => void reloadSaved()}
+        onToast={onToast}
+      />
       <BookingConfirmSheet
         open={sheetOpen}
         busy={booking}

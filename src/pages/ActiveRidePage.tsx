@@ -1,4 +1,8 @@
 import { useState } from 'react'
+import { haversine } from '../lib/geo'
+import { useSavedPlaces } from '../lib/useSavedPlaces'
+import { SavePlaceSheet } from '../components/SavePlaceSheet'
+import type { PlaceDraft } from '../api/savedPlaces'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { useI18n } from '../i18n/context'
@@ -117,6 +121,10 @@ function RideBody({
   const cancelAction = hasAction(ride, 'CANCEL') || hasAction(ride, 'CANCEL_CONFIRM')
   const needsConfirm = hasAction(ride, 'CANCEL_CONFIRM')
   const finished = ride.status === 'COMPLETED' || ride.status === 'CANCELLED'
+  const saved = useSavedPlaces(token)
+  const [savingPlace, setSavingPlace] = useState<PlaceDraft | null>(null)
+  const alreadySaved = (saved.places ?? []).some((p) => haversine(p.lat, p.lon, ride.toLat, ride.toLon) < 0.03)
+  const canSavePlace = ride.passengerId === userId && saved.places !== null && !alreadySaved
   const hasDriver = !!ride.acceptedByDriverName && ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'PICKED_UP', 'COMPLETED'].includes(ride.status)
 
   return (
@@ -185,6 +193,15 @@ function RideBody({
             {t('rating.cta')}
           </Button>
         )}
+        {canSavePlace && (
+          <Button
+            size="lg"
+            block
+            onClick={() => setSavingPlace({ name: ride.toAddress, address: ride.toAddress, lat: ride.toLat, lon: ride.toLon })}
+          >
+            ⭐ {t('places.saveAsPlace')}
+          </Button>
+        )}
         {finished && (
           <Button size="lg" block onClick={onHome}>
             {t('activeRide.bookNew')}
@@ -192,6 +209,14 @@ function RideBody({
         )}
       </div>
 
+      <SavePlaceSheet
+        open={savingPlace !== null}
+        place={savingPlace}
+        token={token}
+        onClose={() => setSavingPlace(null)}
+        onSaved={() => void saved.reload()}
+        onToast={onToast}
+      />
       <ConfirmDialog
         open={a.confirmCancel}
         danger

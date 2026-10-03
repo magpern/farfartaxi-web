@@ -55,6 +55,11 @@ export function MorePage() {
             {t('driver.enablePush')}
           </Button>
         )}
+        {isDriverRole(user.role) && (
+          <ButtonLink size="lg" block to="/app/platser">
+            {t('places.forPlaces')}
+          </ButtonLink>
+        )}
         <ButtonLink size="lg" block to="/app/hjalp">
           {t('menu.help')}
         </ButtonLink>
