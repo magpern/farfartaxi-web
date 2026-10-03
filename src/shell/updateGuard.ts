@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { draftInProgress, type BookingDraft } from '../lib/bookingDraft'
 import { isAnyOverlayOpen } from '../components/ui/overlayRegistry'
-import { registerUpdateGuard } from './integrationStubs'
+import { registerUpdateGuard } from '../pwa'
 
 /** True when reloading the app (new service worker) would lose something: unsafe to update. */
 export function isUnsafeToReload(state: { hasActiveRide: boolean; draft: BookingDraft; overlayOpen: boolean }): boolean {

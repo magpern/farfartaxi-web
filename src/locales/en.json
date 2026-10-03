@@ -275,7 +275,9 @@
     "manualAndroid": "Android: open the menu (⋮) and choose “Install app” or “Add to Home screen”.",
     "manualDesktop": "Desktop: use the install icon in the address bar or the browser menu (e.g. “Install Farfartaxi” / Apps).",
     "helpCalloutTitle": "Add to Home Screen",
-    "helpCalloutLead": "Open the More tab and choose «Add to home screen», or follow the instructions for your device below."
+    "helpCalloutLead": "Open the More tab and choose «Add to home screen», or follow the instructions for your device below.",
+    "newVersion": "A new version is available",
+    "update": "Update"
   },
   "help": {
     "title": "Help & FAQ",
@@ -389,8 +391,7 @@
     "smsAria": "Text {{name}}"
   },
   "lastUpdated": {
-    "stale": "Couldn't reach the server – showing the last known information.",
-    "at": "Last updated {{time}}"
+    "stale": "Couldn't reach the server – showing the last known information."
   },
   "bookingConfirm": {
     "title": "Is this right?",
@@ -442,5 +443,11 @@
   "more": {
     "largeText": "Large text",
     "largeTextHint": "Makes all text in the app bigger"
+  },
+  "network": {
+    "offline": "No connection",
+    "unreachable": "Couldn't reach the server — retrying",
+    "actionFailed": "Couldn't reach the server — please try again",
+    "lastUpdated": "Last updated {{time}}"
   }
 }

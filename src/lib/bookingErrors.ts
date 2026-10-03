@@ -1,3 +1,5 @@
+import { isNetworkError } from './apiErrors'
+
 type T = (key: string, vars?: Record<string, string | number>) => string
 
 function getErrorMessage(err: unknown) {
@@ -7,6 +9,7 @@ function getErrorMessage(err: unknown) {
 
 /** Maps backend validation text to localized toast copy for booking. */
 export function bookingApiErrorMessage(err: unknown, t: T) {
+  if (isNetworkError(err)) return t('network.actionFailed')
   const msg = getErrorMessage(err)
   if (!msg) return t('errors.generic')
   const lower = msg.toLowerCase()

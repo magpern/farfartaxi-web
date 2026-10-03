@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n/context'
-import { formatHm } from '../lib/time'
+import { formatLastUpdated } from '../lib/network'
 
 /** "Senast uppdaterad 14:32", plus a clear stale/offline message when the last refresh failed. */
 export function LastUpdated({ at, failed }: { at: number | null; failed: boolean }) {
@@ -7,7 +7,7 @@ export function LastUpdated({ at, failed }: { at: number | null; failed: boolean
   return (
     <div className={`last-updated ${failed ? 'last-updated-stale' : ''}`} role="status">
       {failed && <strong>{t('lastUpdated.stale')}</strong>}
-      {at != null && <span> {t('lastUpdated.at', { time: formatHm(new Date(at).toISOString()) })}</span>}
+      {at != null && <span> {t('network.lastUpdated', { time: formatLastUpdated(new Date(at)) })}</span>}
     </div>
   )
 }

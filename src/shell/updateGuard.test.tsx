@@ -4,7 +4,7 @@ import { BottomSheet } from '../components/ui/BottomSheet'
 import { resetOverlayRegistry } from '../components/ui/overlayRegistry'
 import { defaultDraft } from '../lib/bookingDraft'
 import { renderApp } from '../test/render'
-import { __isReloadUnsafe } from './integrationStubs'
+import { isUnsafe as __isReloadUnsafe } from '../pwa/updatePolicy'
 import { isUnsafeToReload, useUpdateGuard } from './updateGuard'
 
 afterEach(() => {

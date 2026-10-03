@@ -24,11 +24,6 @@ import {
 } from './lib/session'
 import { AppShell } from './shell/AppShell'
 import type { AuthResponse, UserView } from './shell/types'
-import { registerSW } from 'virtual:pwa-register'
-
-// NOTE (M2 integration): the network/PWA worker moves service-worker registration into main.tsx
-// (registerType 'prompt'); remove this call when merging their branch.
-registerSW({ immediate: true })
 
 declare global {
   interface Window {
