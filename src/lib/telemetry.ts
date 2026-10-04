@@ -9,7 +9,7 @@ import { API_URL, readStoredAuth, refreshSession, REFRESH_AHEAD_MS, tokenExpires
 export type BookingSource = 'home' | 'search' | 'favorite' | 'recent' | 'rebook'
 export type TelemetryProps = Record<string, unknown>
 
-type Kind = 'int' | 'string' | 'bookingKind' | 'bookingSource' | 'pushState' | 'cancelKind' | 'provider' | 'searchKind' | 'cancelStatus' | 'shortString'
+type Kind = 'int' | 'string' | 'bookingKind' | 'bookingSource' | 'pushState' | 'cancelKind' | 'provider' | 'searchKind' | 'cancelStatus' | 'shortString' | 'errorType' | 'errorCode' | 'token' | 'hex16'
 
 const BOOKING: Record<string, Kind> = { kind: 'bookingKind', source: 'bookingSource' }
 const ALLOWLIST: Record<string, Record<string, Kind>> = {
@@ -22,7 +22,7 @@ const ALLOWLIST: Record<string, Record<string, Kind>> = {
   ride_cancelled: { kind: 'bookingKind', status: 'cancelStatus' },
   push_permission: { state: 'pushState' },
   push_opened: { kind: 'shortString' },
-  frontend_error: { message: 'string', source: 'string', line: 'int' }
+  frontend_error: { type: 'errorType', source: 'token', code: 'errorCode', line: 'int', fingerprint: 'hex16' }
 }
 
 export const TELEMETRY_EVENT_NAMES = Object.keys(ALLOWLIST)
@@ -32,7 +32,11 @@ export const FLUSH_INTERVAL_MS = 30_000
 export const MAX_ERRORS_PER_SESSION = 10
 const MAX_STRING = 60
 const MAX_MESSAGE = 200
-const MAX_SOURCE = 120
+const ERROR_TYPES = ['TypeError', 'ReferenceError', 'RangeError', 'SyntaxError', 'NetworkError', 'ChunkLoadError', 'Error', 'Other']
+const ERROR_CODES = ['UNHANDLED_ERROR', 'UNHANDLED_REJECTION', 'RENDER_ERROR']
+export type FrontendErrorCode = 'UNHANDLED_ERROR' | 'UNHANDLED_REJECTION' | 'RENDER_ERROR'
+const TOKEN_RE = /^[A-Za-z0-9_.-]{1,40}$/
+const HEX16_RE = /^[0-9a-f]{16}$/
 const SESSION_KEY = 'farfartaxi-telemetry-sid'
 
 const FORBIDDEN_KEY = /lat|lon|address|name|email|phone/i
@@ -83,6 +87,14 @@ function valid(kind: Kind, v: unknown): v is string | number {
       return typeof v === 'string' && SEARCH_KINDS.includes(v)
     case 'cancelStatus':
       return typeof v === 'string' && CANCEL_STATUSES.includes(v)
+    case 'errorType':
+      return typeof v === 'string' && ERROR_TYPES.includes(v)
+    case 'errorCode':
+      return typeof v === 'string' && ERROR_CODES.includes(v)
+    case 'token':
+      return typeof v === 'string' && TOKEN_RE.test(v)
+    case 'hex16':
+      return typeof v === 'string' && HEX16_RE.test(v)
     case 'shortString':
       return typeof v === 'string' && v.length > 0 && v.length <= MAX_SHORT
   }
@@ -99,7 +111,7 @@ export function sanitizeEvent(name: string, props: TelemetryProps | undefined): 
     if (typeof value === 'string' && COORD_RE.test(value)) return null
     const kind = allowed[key]
     if (!kind || !valid(kind, value)) continue
-    out[key] = typeof value === 'string' && kind === 'string' ? value.slice(0, name === 'frontend_error' ? (key === 'message' ? MAX_MESSAGE : MAX_SOURCE) : MAX_STRING) : value
+    out[key] = typeof value === 'string' && kind === 'string' ? value.slice(0, MAX_STRING) : value
   }
   return out
 }
@@ -205,20 +217,85 @@ export function stripUrls(text: string): string {
   return text.replace(URL_RE, (u) => u.split(/[?#]/)[0]).replace(/(\/[^\s?#"'<>]*)[?#][^\s"'<>]*/g, '$1')
 }
 
-export function trackFrontendError(message: unknown, source?: unknown, line?: unknown): void {
+/** Normalizes a message so it only identifies the error shape: no URLs, digits or case/whitespace noise. */
+export function normalizeMessage(message: string): string {
+  return stripUrls(message)
+    .replace(/\b(?:https?|wss?|blob):\/\/\S+/gi, '')
+    .replace(/\/[^\s?#"'<>]*/g, '')
+    .toLowerCase()
+    .replace(/\d+/g, '#')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** First 16 hex chars of SHA-256 of the normalized message. The raw message never leaves the device. */
+export async function fingerprintMessage(message: string): Promise<string | null> {
+  try {
+    const data = new TextEncoder().encode(normalizeMessage(message))
+    const digest = await crypto.subtle.digest('SHA-256', data)
+    return Array.from(new Uint8Array(digest))
+      .slice(0, 8)
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+  } catch {
+    return null
+  }
+}
+
+export function classifyErrorType(err: unknown, message: string): string {
+  const name = err instanceof Error ? err.name : ''
+  if (ERROR_TYPES.includes(name) && name !== 'Other' && name !== 'Error') return name
+  if (name === 'ChunkLoadError' || /loading (?:css )?chunk|dynamically imported module|importing a module script/i.test(message)) return 'ChunkLoadError'
+  if (/networkerror|failed to fetch|load failed|network request failed/i.test(message)) return 'NetworkError'
+  const m = /^(TypeError|ReferenceError|RangeError|SyntaxError)\b/.exec(message)
+  if (m) return m[1]
+  return name === 'Error' ? 'Error' : 'Other'
+}
+
+/** Best-effort component/area token from a module file name (path and query dropped); "unknown" otherwise. */
+export function deriveSource(...candidates: unknown[]): string {
+  for (const c of candidates) {
+    if (typeof c !== 'string' || !c) continue
+    const refs = c.match(/[^\s()@]*[A-Za-z0-9_.-]+\.(?:tsx?|jsx?|mjs)(?=[?#:)\s]|$)/g) ?? []
+    for (const ref of refs) {
+      const base = ref.split(/[?#]/)[0].split('/').pop() ?? ''
+      const name = base.replace(/\.(?:tsx?|jsx?|mjs)$/, '').replace(/[^A-Za-z0-9_.-]/g, '')
+      if (name && name !== 'index' && !/^\d/.test(name)) return name.slice(0, 40)
+    }
+  }
+  return 'unknown'
+}
+
+/**
+ * Records a sanitized frontend error: type, source token, code, line and a message fingerprint only.
+ * `error` may be an Error, string or ErrorEvent message; `source` a script file name or stack.
+ */
+export function trackFrontendError(error: unknown, source?: unknown, line?: unknown, code: FrontendErrorCode = 'UNHANDLED_ERROR'): void {
   try {
     if (errorCount >= MAX_ERRORS_PER_SESSION) return
-    const msg = stripUrls(typeof message === 'string' ? message : message instanceof Error ? message.message : String(message ?? '')).slice(0, MAX_MESSAGE)
+    const raw = typeof error === 'string' ? error : error instanceof Error ? error.message : String(error ?? '')
+    const msg = stripUrls(raw).slice(0, MAX_MESSAGE)
     if (!msg || seenErrors.has(msg)) return
     seenErrors.add(msg)
     errorCount++
-    const props: TelemetryProps = { message: msg }
-    if (typeof source === 'string' && source) props.source = stripUrls(source).slice(0, MAX_SOURCE)
+    const props: TelemetryProps = {
+      type: classifyErrorType(error, raw),
+      source: deriveSource(error instanceof Error ? error.stack : undefined, source),
+      code
+    }
     if (typeof line === 'number' && Number.isInteger(line)) props.line = line
-    track('frontend_error', props)
+    void fingerprintMessage(raw).then((fingerprint) => {
+      if (fingerprint) props.fingerprint = fingerprint
+      track('frontend_error', props)
+    })
   } catch {
     /* ignore */
   }
+}
+
+/** Hook point for a React error boundary's componentDidCatch (none exists yet). */
+export function trackRenderError(error: unknown): void {
+  trackFrontendError(error, undefined, undefined, 'RENDER_ERROR')
 }
 
 let installed = false
@@ -232,10 +309,10 @@ export function initTelemetry(): void {
   })
   window.addEventListener('pagehide', () => void flush())
   window.addEventListener('online', () => void flush())
-  window.addEventListener('error', (e: ErrorEvent) => trackFrontendError(e.message, e.filename, e.lineno))
+  window.addEventListener('error', (e: ErrorEvent) => trackFrontendError(e.error ?? e.message, e.filename, e.lineno, 'UNHANDLED_ERROR'))
   window.addEventListener('unhandledrejection', (e: PromiseRejectionEvent) => {
     const r = e.reason as unknown
-    trackFrontendError(r instanceof Error ? r.message : typeof r === 'string' ? r : 'unhandledrejection', 'unhandledrejection')
+    trackFrontendError(r instanceof Error || typeof r === 'string' ? r : 'unhandledrejection', undefined, undefined, 'UNHANDLED_REJECTION')
   })
 }
 

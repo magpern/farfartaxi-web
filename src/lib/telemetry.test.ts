@@ -11,7 +11,9 @@ import {
   setBookingSource,
   getBookingSource,
   track,
-  trackFrontendError
+  trackFrontendError,
+  trackRenderError,
+  deriveSource
 } from './telemetry'
 
 const fetchMock = vi.fn()
@@ -147,10 +149,8 @@ describe('flush', () => {
 
 describe('privacy checks and enums', () => {
   it('drops events with coordinate-like strings and strips relative URL queries', () => {
-    trackFrontendError('GET /api/places/reverse?lat=59.42351&lon=17.91234 failed')
-    expect(__queueSnapshot()[0].props.message).toBe('GET /api/places/reverse failed')
-    for (const m of ['Invalid LatLng object: (59.42351, NaN)', 'pos 59.42351', '59,42351 17,91234']) trackFrontendError(m)
-    expect(__queueSnapshot()).toHaveLength(1)
+    expect(sanitizeEvent('frontend_error', { message: 'x', type: 'TypeError', code: 'UNHANDLED_ERROR' })).toEqual({ type: 'TypeError', code: 'UNHANDLED_ERROR' })
+    expect(sanitizeEvent('frontend_error', { source: 'pos 59.42351' })).toBeNull()
   })
   it('enforces provider/kind/status enums', () => {
     expect(sanitizeEvent('search_result_selected', { provider: 'SL', kind: 'STOP' })).toEqual({ provider: 'SL', kind: 'STOP' })
@@ -195,28 +195,63 @@ describe('flush with expired token', () => {
 })
 
 describe('frontend_error', () => {
-  it('strips url query/fragment, truncates and caps lengths', () => {
-    trackFrontendError('Failed https://a.se/x?token=abc#frag now', 'https://a.se/app.js?v=1', 12)
+  const flushPromises = () => new Promise((r) => setTimeout(r, 50))
+  it('sends only type/source/code/line/fingerprint, never the message', async () => {
+    trackFrontendError(new TypeError('Cannot read 59.42351 of https://a.se/x?token=abc'), 'https://a.se/assets/BookingPage-1a2b.js?v=1', 12)
+    await flushPromises()
     const e = __queueSnapshot()[0]
-    expect(e.props.message).toBe('Failed https://a.se/x now')
-    expect(e.props.source).toBe('https://a.se/app.js')
+    expect(Object.keys(e.props).sort()).toEqual(['code', 'fingerprint', 'line', 'source', 'type'])
+    expect(e.props.type).toBe('TypeError')
+    expect(e.props.code).toBe('UNHANDLED_ERROR')
     expect(e.props.line).toBe(12)
-    trackFrontendError('y'.repeat(500))
-    expect((__queueSnapshot()[1].props.message as string).length).toBe(200)
+    expect(String(e.props.fingerprint)).toMatch(/^[0-9a-f]{16}$/)
+    expect(JSON.stringify(e)).not.toContain('Cannot read')
+    expect('message' in e.props).toBe(false)
   })
-  it('dedupes identical messages and caps at 10 per session', () => {
+  it('fingerprint is stable for messages differing only in digits/case/urls', async () => {
+    trackFrontendError(new Error('Ride 123 failed at https://a.se/x?q=1'))
+    trackFrontendError(new Error('ride 98765   FAILED at https://b.se/y'))
+    await flushPromises()
+    const [a, b] = __queueSnapshot()
+    expect(a.props.fingerprint).toBe(b.props.fingerprint)
+    trackFrontendError(new Error('something else'))
+    await flushPromises()
+    expect(__queueSnapshot()[2].props.fingerprint).not.toBe(a.props.fingerprint)
+  })
+  it('source never contains / or ?', async () => {
+    expect(deriveSource('https://a.se/assets/LiveRideMap-ab12.js?v=1/x')).not.toMatch(/[/?]/)
+    expect(deriveSource('/a/b/c')).toBe('unknown')
+    expect(deriveSource(undefined)).toBe('unknown')
+    trackFrontendError('weird', 'https://a.se/a/b/???/c.js?x=/y', 1)
+    await flushPromises()
+    expect(String(__queueSnapshot()[0].props.source)).toMatch(/^[A-Za-z0-9_.-]{1,40}$/)
+  })
+  it('classifies types and render errors', async () => {
+    trackFrontendError(new Error('Failed to fetch dynamically imported module'))
+    trackFrontendError('plain string')
+    trackRenderError(new RangeError('bad'))
+    await flushPromises()
+    const q = __queueSnapshot()
+    expect(q.map((e) => e.props.type).sort()).toEqual(['ChunkLoadError', 'Other', 'RangeError'])
+    expect(q.find((e) => e.props.type === 'RangeError')?.props.code).toBe('RENDER_ERROR')
+  })
+  it('dedupes identical messages and caps at 10 per session', async () => {
     trackFrontendError('same')
     trackFrontendError('same')
-    expect(__queueSnapshot()).toHaveLength(1)
     for (let i = 0; i < 30; i++) trackFrontendError(`err ${i}`)
+    await flushPromises()
     expect(__queueSnapshot()).toHaveLength(10)
   })
-  it('captures window error and unhandledrejection', () => {
+  it('captures window error and unhandledrejection', async () => {
     initTelemetry()
     window.dispatchEvent(new ErrorEvent('error', { message: 'boom', filename: 'http://x/a.js?q=1', lineno: 3 }))
     const rej = new Event('unhandledrejection') as Event & { reason?: unknown }
     rej.reason = new Error('rejected')
     window.dispatchEvent(rej)
-    expect(__queueSnapshot().map((e) => e.props.message)).toEqual(['boom', 'rejected'])
+    await flushPromises()
+    expect(__queueSnapshot().map((e) => [e.props.code, e.props.source])).toEqual([
+      ['UNHANDLED_ERROR', 'a'],
+      ['UNHANDLED_REJECTION', expect.any(String)]
+    ])
   })
 })

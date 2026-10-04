@@ -1,4 +1,5 @@
 import L from 'leaflet'
+import { disposeMap } from '../lib/leafletSafe'
 import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef } from 'react'
 
@@ -28,7 +29,7 @@ export function MiniMap({ fromLat, fromLon, toLat, toLon, label }: { fromLat: nu
     if (a[0] === b[0] && a[1] === b[1]) map.setView(a, 15)
     else map.fitBounds(L.latLngBounds([a, b]), { padding: [24, 24], maxZoom: 16 })
     return () => {
-      map.remove()
+      disposeMap(map)
     }
   }, [fromLat, fromLon, toLat, toLon])
   return (
