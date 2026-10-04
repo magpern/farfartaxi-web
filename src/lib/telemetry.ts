@@ -252,6 +252,16 @@ export function classifyErrorType(err: unknown, message: string): string {
   return name === 'Error' ? 'Error' : 'Other'
 }
 
+/** Stack frames only: the first line is dropped (Chromium puts "Name: message" there) and so is any non-frame line. */
+export function stackFrames(stack: unknown): string | undefined {
+  if (typeof stack !== 'string') return undefined
+  const lines = stack.split('\n')
+  const chromium = lines.some((l) => /^\s+at\s/.test(l))
+  return (chromium ? lines.slice(1) : lines) // Firefox/Safari stacks have no header line
+    .filter((l) => /^\s+at\s/.test(l) || /^[^\s]*@\S+:\d+(?::\d+)?$/.test(l.trim()))
+    .join('\n')
+}
+
 /** Best-effort component/area token from a module file name (path and query dropped); "unknown" otherwise. */
 export function deriveSource(...candidates: unknown[]): string {
   for (const c of candidates) {
@@ -280,7 +290,7 @@ export function trackFrontendError(error: unknown, source?: unknown, line?: unkn
     errorCount++
     const props: TelemetryProps = {
       type: classifyErrorType(error, raw),
-      source: deriveSource(error instanceof Error ? error.stack : undefined, source),
+      source: deriveSource(error instanceof Error ? stackFrames(error.stack) : undefined, source),
       code
     }
     if (typeof line === 'number' && Number.isInteger(line)) props.line = line

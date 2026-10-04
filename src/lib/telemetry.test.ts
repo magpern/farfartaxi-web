@@ -226,6 +226,18 @@ describe('frontend_error', () => {
     await flushPromises()
     expect(String(__queueSnapshot()[0].props.source)).toMatch(/^[A-Za-z0-9_.-]{1,40}$/)
   })
+  it('source ignores the stack header line (message) and only scans frames', async () => {
+    const err = new Error('failed loading secret.js now')
+    err.stack = 'Error: failed loading secret.js now\n    at run (https://a.se/assets/BookingPage-1a2b.js?v=1:1:2)'
+    trackFrontendError(err)
+    const bare = new Error('boom secret.js')
+    bare.stack = 'Error: boom secret.js'
+    trackFrontendError(bare)
+    await flushPromises()
+    const [a, b] = __queueSnapshot()
+    expect(a.props.source).toBe('BookingPage-1a2b')
+    expect(b.props.source).toBe('unknown')
+  })
   it('classifies types and render errors', async () => {
     trackFrontendError(new Error('Failed to fetch dynamically imported module'))
     trackFrontendError('plain string')
