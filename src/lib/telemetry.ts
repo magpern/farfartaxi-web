@@ -19,7 +19,7 @@ const ALLOWLIST: Record<string, Record<string, Kind>> = {
   search_result_selected: { provider: 'string', kind: 'string', rank: 'int', queryLength: 'int', latencyMs: 'int' },
   search_empty: { queryLength: 'int' },
   ride_accepted: {},
-  ride_cancelled: { kind: 'cancelKind' },
+  ride_cancelled: { kind: 'bookingKind', status: 'string' },
   push_permission: { state: 'pushState' },
   push_opened: {},
   frontend_error: { message: 'string', source: 'string', line: 'int' }

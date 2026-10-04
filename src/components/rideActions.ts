@@ -49,7 +49,7 @@ export function usePassengerRideActions({ ride, token, onToast, onChanged }: Com
         token,
         body: JSON.stringify(confirm ? { reason, confirm: true } : { reason })
       })
-      track('ride_cancelled', { kind: 'passenger' })
+      track('ride_cancelled', { kind: ride.kind, status: 'by_passenger' })
       setConfirmCancel(false)
       onToast(t('rides.cancelledToast'))
     })
@@ -157,7 +157,7 @@ export function useDriverRideActions({ ride, token, onToast, onChanged }: Common
     act(async () => {
       const text = reason.trim()
       await post('return', text ? { reason: text } : {})
-      track('ride_cancelled', { kind: 'driver' })
+      track('ride_cancelled', { kind: ride.kind, status: 'by_driver' })
       setReturning(false)
       setReason('')
       onToast(t('driver.toastReturned'))
