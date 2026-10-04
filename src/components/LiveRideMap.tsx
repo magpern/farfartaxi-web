@@ -2,7 +2,8 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { useEffect, useRef } from 'react'
 import { useI18n } from '../i18n/context'
-import { API_URL } from '../lib/session'
+import { api } from '../api/client'
+import { disposeMap, isMapAlive } from '../lib/leafletSafe'
 import { showAccuracyCircle, tweenPoint, TWEEN_MS, type EtaTarget, type LatLon } from '../lib/liveTracking'
 
 export type LiveCar = LatLon & { accuracyM?: number | null }
@@ -13,6 +14,10 @@ type Props = {
   car: LiveCar | null
   /** Which stop the car is heading for: drives the auto-fit and which pins show. */
   target: EtaTarget
+  /** Authenticated passenger screen: bearer token for `/api/route/driving`. */
+  token?: string
+  /** Public share page: share token; uses the unauthenticated `/api/public/share/{token}/route`. */
+  shareToken?: string
 }
 
 const pin = (cls: string, text: string) =>
@@ -33,7 +38,7 @@ const tup = (p: LatLon): L.LatLngTuple => [p.lat, p.lon]
 type RouteResponse = { code?: string; routes?: Array<{ geometry?: { coordinates?: number[][] } }> }
 
 /** Live map: moving car, accuracy circle, pickup/destination pins, route line. Shared by the passenger and share pages. */
-export function LiveRideMap({ pickup, destination, car, target }: Props) {
+export function LiveRideMap({ pickup, destination, car, target, token, shareToken }: Props) {
   const { t } = useI18n()
   const node = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -75,8 +80,7 @@ export function LiveRideMap({ pickup, destination, car, target }: Props) {
     return () => {
       unmounted.current = true
       cancelAnimationFrame(anim.current)
-      map.off()
-      map.remove()
+      disposeMap(map)
       mapRef.current = null
       carMarker.current = null
       circle.current = null
@@ -96,7 +100,7 @@ export function LiveRideMap({ pickup, destination, car, target }: Props) {
   }, [pickup, destination, target])
 
   // Route line, fetched once per ride (stub-safe).
-  const routeKey = `${pickup.lat},${pickup.lon},${destination.lat},${destination.lon}`
+  const routeKey = `${pickup.lat},${pickup.lon},${destination.lat},${destination.lon},${shareToken ?? ''}`
   useEffect(() => {
     const map = mapRef.current
     if (!map || (pickup.lat === destination.lat && pickup.lon === destination.lon)) return
@@ -104,12 +108,15 @@ export function LiveRideMap({ pickup, destination, car, target }: Props) {
     let line: L.Polyline | null = null
     void (async () => {
       try {
-        const q = `fromLat=${pickup.lat}&fromLon=${pickup.lon}&toLat=${destination.lat}&toLon=${destination.lon}`
-        const res = await fetch(`${API_URL}/api/public/route/driving?${q}`, { signal: ac.signal, headers: { Accept: 'application/json' } })
-        if (!res.ok) return
-        const data = (await res.json()) as RouteResponse
+        let data: RouteResponse
+        if (shareToken) {
+          data = await api<RouteResponse>(`/api/public/share/${encodeURIComponent(shareToken)}/route`, { signal: ac.signal })
+        } else if (token) {
+          const q = `fromLat=${pickup.lat}&fromLon=${pickup.lon}&toLat=${destination.lat}&toLon=${destination.lon}`
+          data = await api<RouteResponse>(`/api/route/driving?${q}`, { token, signal: ac.signal })
+        } else return
         const coords = data.routes?.[0]?.geometry?.coordinates
-        if (data.code !== 'Ok' || !coords?.length || ac.signal.aborted) return
+        if (data.code !== 'Ok' || !coords?.length || ac.signal.aborted || !isMapAlive(map)) return
         line = L.polyline(
           coords.map((c) => [c[1], c[0]] as L.LatLngTuple),
           { color: '#38bdf8', weight: 5, opacity: 0.85, lineJoin: 'round', interactive: false }
@@ -158,7 +165,7 @@ export function LiveRideMap({ pickup, destination, car, target }: Props) {
       cancelAnimationFrame(anim.current)
       const start = performance.now()
       const step = (now: number) => {
-        if (unmounted.current || mapRef.current !== map) return
+        if (unmounted.current || mapRef.current !== map || !isMapAlive(map)) return
         const p = tweenPoint(from, to, now - start, TWEEN_MS)
         place(p)
         if (now - start < TWEEN_MS) anim.current = requestAnimationFrame(step)
@@ -180,6 +187,7 @@ export function LiveRideMap({ pickup, destination, car, target }: Props) {
     const map = mapRef.current
     if (!map) return
     const stop = target === 'DESTINATION' ? destination : pickup
+    if (!isMapAlive(map)) return
     const fit = (fn: () => void) => {
       fitting.current = true
       try {
@@ -198,7 +206,7 @@ export function LiveRideMap({ pickup, destination, car, target }: Props) {
     const pts = L.latLngBounds([tup(stop), [carLat, carLon]])
     const view = map.getBounds()
     if (!userMoved.current || !view.contains(pts)) {
-      fit(() => map.fitBounds(pts, { padding: [40, 40], maxZoom: 16, animate: true }))
+      fit(() => map.fitBounds(pts, { padding: [40, 40], maxZoom: 16, animate: false }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refit on car/target change only
   }, [carLat, carLon, target])

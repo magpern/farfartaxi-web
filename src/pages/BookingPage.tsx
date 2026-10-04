@@ -5,9 +5,9 @@ import 'leaflet/dist/leaflet.css'
 import { useI18n } from '../i18n/context'
 import { PickupNoteField } from '../components/PickupNoteField'
 import { api } from '../api/client'
-import { API_URL } from '../lib/session'
 import { setBookingSource, track, getBookingSource } from '../lib/telemetry'
 import { buildRideBookPayload, defaultDraft, isMyPositionText, UnresolvedPickupError } from '../lib/bookingDraft'
+import { disposeMap, isMapAlive } from '../lib/leafletSafe'
 import { haversine } from '../lib/geo'
 import type { RideResponse } from '../lib/rideTypes'
 import { createIdempotencyHolder } from '../lib/idempotency'
@@ -214,7 +214,7 @@ export function BookingPage() {
           if (cur.fromAddress.trim()) return
           const m = mapRef.current
           // Only move the camera when no destination was chosen meanwhile.
-          if (m && !cur.toAddress.trim()) {
+          if (isMapAlive(m) && !cur.toAddress.trim()) {
             programmaticCameraRef.current = true
             skipReverseOnMoveEndRef.current = true
             m.setView([latitude, longitude], 17)
@@ -244,8 +244,8 @@ export function BookingPage() {
       if (reverseGeocodeDebounceRef.current != null) clearTimeout(reverseGeocodeDebounceRef.current)
       reverseGeocodeDebounceRef.current = null
       addressPinRef.current = null
-      map.remove()
       mapRef.current = null
+      disposeMap(map)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- map init only on mount; do not recreate when draft updates
   }, [setDraft])
@@ -296,20 +296,8 @@ export function BookingPage() {
     const debounceId = window.setTimeout(() => {
       void (async () => {
         try {
-          const url =
-            `${API_URL}/api/public/route/driving?fromLat=${encodeURIComponent(String(fromLat))}` +
-            `&fromLon=${encodeURIComponent(String(fromLon))}&toLat=${encodeURIComponent(String(toLat))}` +
-            `&toLon=${encodeURIComponent(String(toLon))}`
-          const res = await fetch(url, {
-            signal: ac.signal,
-            headers: { Accept: 'application/json' }
-          })
-          if (!res.ok) {
-            clearRouteLine()
-            setRoadRoute(null)
-            return
-          }
-          const data = (await res.json()) as OsrmRouteResponse
+          const q = `fromLat=${encodeURIComponent(String(fromLat))}&fromLon=${encodeURIComponent(String(fromLon))}&toLat=${encodeURIComponent(String(toLat))}&toLon=${encodeURIComponent(String(toLon))}`
+          const data = await api<OsrmRouteResponse>(`/api/route/driving?${q}`, { token: tokenRef.current, signal: ac.signal })
           const rte = data.routes?.[0]
           const coords = rte?.geometry?.coordinates
           if (data.code !== 'Ok' || !rte || !coords?.length) {
@@ -335,7 +323,7 @@ export function BookingPage() {
             programmaticCameraRef.current = true
             skipReverseOnMoveEndRef.current = true
             logBookingMap('route fitBounds start; zoom recenter suppressed until fit + pan complete')
-            map.fitBounds(line.getBounds(), { padding: [32, 32], maxZoom: 15 })
+            map.fitBounds(line.getBounds(), { padding: [32, 32], maxZoom: 15, animate: false })
             let routeCameraDone = false
             const finishRouteCamera = () => {
               if (routeCameraDone) return
@@ -347,7 +335,7 @@ export function BookingPage() {
               logBookingMap(
                 `route camera: moveend/fallback — pan to lastLocationSet=${field} → [${Number.isFinite(lat) ? lat.toFixed(5) : '?'},${Number.isFinite(lon) ? lon.toFixed(5) : '?'}]`
               )
-              if (Number.isFinite(lat) && Number.isFinite(lon)) {
+              if (isMapAlive(map) && Number.isFinite(lat) && Number.isFinite(lon)) {
                 skipReverseOnMoveEndRef.current = true
                 map.panTo([lat, lon], { animate: false, noMoveStart: true })
                 lastStableMapCenterRef.current = { lat, lng: lon }
@@ -411,6 +399,7 @@ export function BookingPage() {
     mapClickReverseAbortRef.current?.abort()
     programmaticCameraRef.current = true
     skipReverseOnMoveEndRef.current = true
+    if (!isMapAlive(m)) return
     m.setView([lat, lon], m.getZoom())
     lastStableMapCenterRef.current = { lat, lng: lon }
     lastLocationSetRef.current = field
@@ -426,7 +415,7 @@ export function BookingPage() {
     mapClickReverseAbortRef.current?.abort()
     programmaticCameraRef.current = true
     skipReverseOnMoveEndRef.current = true
-    mapRef.current?.setView([lat, lon], 15)
+    if (isMapAlive(mapRef.current)) mapRef.current.setView([lat, lon], 15)
     lastStableMapCenterRef.current = { lat, lng: lon }
     lastLocationSetRef.current = field
     window.setTimeout(() => {

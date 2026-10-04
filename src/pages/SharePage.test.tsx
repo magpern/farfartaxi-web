@@ -6,7 +6,7 @@ import { json, mockFetch } from '../test/fetchMock'
 import { SharePage } from './SharePage'
 
 vi.mock('../components/LiveRideMap', () => ({
-  LiveRideMap: (p: { car: unknown; target: string }) => <div data-testid="map" data-target={p.target} data-car={JSON.stringify(p.car)} />
+  LiveRideMap: (p: { car: unknown; target: string; shareToken?: string; token?: string }) => <div data-testid="map" data-share={p.shareToken} data-auth={p.token ?? ''} data-target={p.target} data-car={JSON.stringify(p.car)} />
 }))
 
 const shared = {
@@ -61,6 +61,8 @@ describe('SharePage', () => {
     expect(screen.getByRole('heading', { name: 'Lisa åker med Folke' })).toBeInTheDocument()
     expect(screen.getByTestId('live-status-line')).toHaveTextContent('Folke är 6 min bort')
     expect(screen.getByTestId('map')).toHaveAttribute('data-target', 'PICKUP')
+    expect(screen.getByTestId('map')).toHaveAttribute('data-share', 'tok123')
+    expect(screen.getByTestId('map')).toHaveAttribute('data-auth', '')
     expect(screen.getByText(/Senast uppdaterad \d\d:\d\d/)).toBeInTheDocument()
     expect(fn).toHaveBeenCalledTimes(1)
     await act(async () => void vi.advanceTimersByTime(10_000))

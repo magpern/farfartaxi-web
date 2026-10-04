@@ -79,13 +79,13 @@ export function SharePage() {
             <h1>{t('live.shareMissing')}</h1>
           </section>
         )}
-        {state.kind === 'ok' && <SharedView ride={state.ride} at={state.at} />}
+        {state.kind === 'ok' && <SharedView shareToken={token} ride={state.ride} at={state.at} />}
       </div>
     </main>
   )
 }
 
-function SharedView({ ride, at }: { ride: SharedRide; at: number }) {
+function SharedView({ ride, at, shareToken }: { ride: SharedRide; at: number; shareToken: string }) {
   const { t } = useI18n()
   const driver = ride.driverFirstName || t('live.defaultDriver')
   const target = ride.etaTarget ?? targetForStatus(ride.status)
@@ -111,6 +111,7 @@ function SharedView({ ride, at }: { ride: SharedRide; at: number }) {
       />
       {!finished && (
         <LiveRideMap
+          shareToken={shareToken}
           pickup={ride.pickup}
           destination={ride.destination}
           target={target}

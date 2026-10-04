@@ -183,6 +183,7 @@ function RideBody({
       <div className="live-map-slot" data-slot="live-map">
         {showMap && (
           <LiveRideMap
+            token={token}
             pickup={{ lat: ride.fromLat, lon: ride.fromLon }}
             destination={{ lat: ride.toLat, lon: ride.toLon }}
             target={ride.status === 'PICKED_UP' ? 'DESTINATION' : targetForStatus(ride.status)}
