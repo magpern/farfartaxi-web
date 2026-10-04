@@ -14,6 +14,7 @@ import { useBookingDraft } from '../shell/BookingDraftContext'
 import { useShell } from '../shell/ShellContext'
 import { useActiveRide } from '../shell/ActiveRide'
 import { bookPath, isDriverRole } from '../shell/types'
+import { getBookingSource, setBookingSource, track } from '../lib/telemetry'
 import { useBookingUsers } from '../lib/useBookingUsers'
 import { BookingConfirmSheet, PassengerPicker } from '../components/BookingConfirmSheet'
 import { focusBookingField, type BookingEditField } from '../components/bookingFocus'
@@ -112,6 +113,8 @@ export function PreBookPage() {
         })
         idempotency.current.reset()
         clearBookingDraft()
+        track('booking_created', { kind: 'SCHEDULED', source: getBookingSource() })
+        setBookingSource('home')
         setSheetOpen(false)
         void refreshActive()
         navigate('/app/bekraftelse', { state: { ride } })

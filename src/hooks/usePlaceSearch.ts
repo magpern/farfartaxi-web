@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { track } from '../lib/telemetry'
 import {
   DEFAULT_LIMIT,
   MORE_LIMIT,
@@ -33,10 +34,11 @@ export function usePlaceSearch({ token, query, enabled = true, context }: Option
   const active = enabled && q.length >= MIN_QUERY_CHARS
   const [expandedFor, setExpandedFor] = useState<string | null>(null)
   const expanded = expandedFor === q
-  const [state, setState] = useState<{ status: PlaceSearchStatus; results: PlaceResult[]; hasMore: boolean }>({
+  const [state, setState] = useState<{ status: PlaceSearchStatus; results: PlaceResult[]; hasMore: boolean; latencyMs: number }>({
     status: 'idle',
     results: [],
-    hasMore: false
+    hasMore: false,
+    latencyMs: 0
   })
 
   const gpsLat = context?.gps?.lat
@@ -47,7 +49,7 @@ export function usePlaceSearch({ token, query, enabled = true, context }: Option
 
   useEffect(() => {
     if (!active) {
-      setState((s) => (s.status === 'idle' && s.results.length === 0 ? s : { status: 'idle', results: [], hasMore: false }))
+      setState((s) => (s.status === 'idle' && s.results.length === 0 ? s : { status: 'idle', results: [], hasMore: false, latencyMs: 0 }))
       return
     }
     const ctrl = new AbortController()
@@ -57,14 +59,17 @@ export function usePlaceSearch({ token, query, enabled = true, context }: Option
     }
     const id = setTimeout(() => {
       setState((s) => ({ ...s, status: 'loading' }))
+      const startedAt = Date.now()
       searchPlaces(token, q, ctx, expanded ? MORE_LIMIT : DEFAULT_LIMIT, ctrl.signal)
         .then((r) => {
           if (ctrl.signal.aborted) return
-          setState({ status: 'ready', results: r.results ?? [], hasMore: !!r.hasMore })
+          const results = r.results ?? []
+          if (results.length === 0) track('search_empty', { queryLength: q.length })
+          setState({ status: 'ready', results, hasMore: !!r.hasMore, latencyMs: Date.now() - startedAt })
         })
         .catch(() => {
           if (ctrl.signal.aborted) return
-          setState({ status: 'error', results: [], hasMore: false })
+          setState({ status: 'error', results: [], hasMore: false, latencyMs: 0 })
         })
     }, SEARCH_DEBOUNCE_MS)
     return () => {

@@ -1,3 +1,4 @@
+import { track } from '../telemetry'
 import { api } from '../../api/client'
 import { getPermission, pushSupported, type PushPermission } from './env'
 
@@ -52,6 +53,7 @@ async function syncSubscription(token: string): Promise<SubscribeResult> {
 export async function subscribe(token: string): Promise<SubscribeResult> {
   if (!pushSupported()) return 'unsupported'
   const permission = await Notification.requestPermission()
+  track('push_permission', { state: permission })
   if (permission !== 'granted') return permission
   return syncSubscription(token)
 }

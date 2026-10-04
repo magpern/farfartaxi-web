@@ -2,6 +2,7 @@ import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { renderApp } from '../test/render'
+import { __queueSnapshot, __resetTelemetry, setBookingSource } from '../lib/telemetry'
 import { BookingConfirmSheet } from './BookingConfirmSheet'
 
 const base = {
@@ -18,6 +19,13 @@ const base = {
 }
 
 describe('BookingConfirmSheet', () => {
+  it('emits booking_started with kind and source when opened', () => {
+    __resetTelemetry()
+    setBookingSource('favorite')
+    renderApp(<BookingConfirmSheet {...base} when={{ now: true, iso: '2026-10-24T12:30:00Z' }} />)
+    expect(__queueSnapshot().map((e) => [e.name, e.props])).toEqual([['booking_started', { kind: 'NOW', source: 'favorite' }]])
+  })
+
   it('summarizes who, when (weekday + Stockholm time), pickup, destination and note', () => {
     renderApp(<BookingConfirmSheet {...base} />)
     expect(screen.getByText('Anna Berg')).toBeInTheDocument()

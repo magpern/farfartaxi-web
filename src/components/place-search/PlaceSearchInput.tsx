@@ -1,5 +1,6 @@
-import { useId, useState, type KeyboardEvent } from 'react'
+import { useId, useRef, useState, type KeyboardEvent } from 'react'
 import { recordSelection, type PlaceResult, type SearchContext } from '../../api/places'
+import { track } from '../../lib/telemetry'
 import { usePlaceSearch } from '../../hooks/usePlaceSearch'
 import { PlaceResultList } from './PlaceResultList'
 import { optionId } from './format'
@@ -46,7 +47,16 @@ export function PlaceSearchInput({
   const search = usePlaceSearch({ token, query: value, enabled: open, context })
   const showList = open && search.active
 
+  const startedRef = useRef(false)
+
   function pick(p: PlaceResult) {
+    track('search_result_selected', {
+      provider: p.provider,
+      kind: p.kind,
+      rank: Math.max(0, search.results.indexOf(p)),
+      queryLength: value.trim().length,
+      latencyMs: search.latencyMs
+    })
     recordSelection(token, value.trim(), p)
     setOpen(false)
     setActiveIndex(-1)
@@ -92,11 +102,18 @@ export function PlaceSearchInput({
           value={value}
           placeholder={placeholder}
           aria-label={ariaLabel}
-          onFocus={onFocus}
+          onFocus={() => {
+            startedRef.current = false
+            onFocus?.()
+          }}
           onKeyDown={onKeyDown}
           onChange={(e) => {
             setOpen(true)
             setActiveIndex(-1)
+            if (!startedRef.current && e.target.value.trim().length > 0) {
+              startedRef.current = true
+              track('search_started', { queryLength: e.target.value.trim().length })
+            }
             onChange(e.target.value)
           }}
         />

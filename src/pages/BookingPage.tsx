@@ -6,6 +6,7 @@ import { useI18n } from '../i18n/context'
 import { PickupNoteField } from '../components/PickupNoteField'
 import { api } from '../api/client'
 import { API_URL } from '../lib/session'
+import { setBookingSource, track, getBookingSource } from '../lib/telemetry'
 import { buildRideBookPayload, defaultDraft, isMyPositionText, UnresolvedPickupError } from '../lib/bookingDraft'
 import { haversine } from '../lib/geo'
 import type { RideResponse } from '../lib/rideTypes'
@@ -487,6 +488,8 @@ export function BookingPage() {
         })
         idempotency.current.reset()
         clearBookingDraft()
+        track('booking_created', { kind: 'NOW', source: getBookingSource() })
+        setBookingSource('home')
         setSheetOpen(false)
         void refreshActive()
         // The new ride is the home screen from now on (a driver booking for someone else stays put).
@@ -555,6 +558,7 @@ export function BookingPage() {
 
   /** Favourite / recent / home: one tap fills the destination. */
   function fillDestination(p: { label: string; address: string; lat: number; lon: number }) {
+    setBookingSource('favorite')
     applySearchResult(
       { provider: 'FAVORITE', providerPlaceId: null, kind: 'FAVORITE', name: p.label, area: null, formattedAddress: p.address, lat: p.lat, lon: p.lon, distanceKm: null },
       'to'
@@ -563,10 +567,12 @@ export function BookingPage() {
 
   function goHome() {
     if (!homePlace) {
+      setBookingSource('home')
       navigate('/app/platser?add=HOME')
       return
     }
     fillDestination({ label: homePlace.label, address: homePlace.formattedAddress || homePlace.address, lat: homePlace.lat, lon: homePlace.lon })
+    setBookingSource('home') // after fillDestination, which sets 'favorite'
     if (!draftRef.current.fromAddress.trim()) {
       if (gpsState !== 'pending') {
         onToast(t('home.needPickup'))
@@ -627,7 +633,10 @@ export function BookingPage() {
           disabled={booking || resolving}
           onGoHome={goHome}
           onPlace={(p) => fillDestination({ label: p.label, address: p.formattedAddress || p.address, lat: p.lat, lon: p.lon })}
-          onRecent={(p) => applySearchResult(p, 'to')}
+          onRecent={(p) => {
+            setBookingSource('recent')
+            applySearchResult(p, 'to')
+          }}
         />
         <div className="address-flow">
           <div className="address-line" aria-hidden />
@@ -648,7 +657,10 @@ export function BookingPage() {
                 setActiveField('from')
                 setDraft((d) => ({ ...d, fromAddress: v, fromIsGps: false }))
               }}
-              onSelect={(p) => applySearchResult(p, 'from')}
+              onSelect={(p) => {
+                setBookingSource('search')
+                applySearchResult(p, 'from')
+              }}
               onClear={() => clearField('from')}
             />
             {stop && gps && gpsAccurate && draft.fromIsGps && (
@@ -680,7 +692,10 @@ export function BookingPage() {
                 setActiveField('to')
                 setDraft((d) => ({ ...d, toAddress: v }))
               }}
-              onSelect={(p) => applySearchResult(p, 'to')}
+              onSelect={(p) => {
+                setBookingSource('search')
+                applySearchResult(p, 'to')
+              }}
               onSave={(p) => setToSave(draftFromResult(p))}
               onClear={() => clearField('to')}
             />

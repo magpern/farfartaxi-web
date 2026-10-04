@@ -5,6 +5,7 @@ import { apiErrorMessage, isApiCode } from '../lib/apiErrors'
 import type { RideResponse } from '../lib/rideTypes'
 import { shortPlaceName } from '../lib/navigation'
 import { formatHm } from '../lib/time'
+import { track } from '../lib/telemetry'
 import { useBusy } from '../lib/useBusy'
 import type { RidePatch } from './RideTimeEdit'
 
@@ -48,6 +49,7 @@ export function usePassengerRideActions({ ride, token, onToast, onChanged }: Com
         token,
         body: JSON.stringify(confirm ? { reason, confirm: true } : { reason })
       })
+      track('ride_cancelled', { kind: ride.kind, status: 'by_passenger' })
       setConfirmCancel(false)
       onToast(t('rides.cancelledToast'))
     })
@@ -132,6 +134,7 @@ export function useDriverRideActions({ ride, token, onToast, onChanged }: Common
   const accept = (confirmProximity: boolean) =>
     act(async () => {
       await post('accept', confirmProximity ? { confirmProximity: true } : undefined)
+      track('ride_accepted')
       setProximity(null)
       onToast(t('driver.toastAccepted'))
     })
@@ -154,6 +157,7 @@ export function useDriverRideActions({ ride, token, onToast, onChanged }: Common
     act(async () => {
       const text = reason.trim()
       await post('return', text ? { reason: text } : {})
+      track('ride_cancelled', { kind: ride.kind, status: 'by_driver' })
       setReturning(false)
       setReason('')
       onToast(t('driver.toastReturned'))
