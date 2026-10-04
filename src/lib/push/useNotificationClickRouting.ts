@@ -9,9 +9,9 @@ export function useNotificationClickRouting(): void {
   useEffect(() => {
     if (typeof navigator === 'undefined' || !navigator.serviceWorker) return
     const onMessage = (e: MessageEvent) => {
-      const d = e.data as { type?: unknown; url?: unknown } | null
+      const d = e.data as { type?: unknown; url?: unknown; kind?: unknown } | null
       if (!d || d.type !== NOTIFICATION_CLICK_MESSAGE) return
-      track('push_opened')
+      track('push_opened', typeof d.kind === 'string' ? { kind: d.kind } : undefined)
       navigate(safeUrl(d.url))
     }
     navigator.serviceWorker.addEventListener('message', onMessage)

@@ -1,4 +1,4 @@
-import { API_URL, readStoredAuth } from './session'
+import { API_URL, readStoredAuth, refreshSession, REFRESH_AHEAD_MS, tokenExpiresWithin } from './session'
 
 /**
  * Privacy-first product telemetry (M8). Strict client-side allowlists mirror the backend contract
@@ -9,19 +9,19 @@ import { API_URL, readStoredAuth } from './session'
 export type BookingSource = 'home' | 'search' | 'favorite' | 'recent' | 'rebook'
 export type TelemetryProps = Record<string, unknown>
 
-type Kind = 'int' | 'string' | 'bookingKind' | 'bookingSource' | 'pushState' | 'cancelKind'
+type Kind = 'int' | 'string' | 'bookingKind' | 'bookingSource' | 'pushState' | 'cancelKind' | 'provider' | 'searchKind' | 'cancelStatus' | 'shortString'
 
 const BOOKING: Record<string, Kind> = { kind: 'bookingKind', source: 'bookingSource' }
 const ALLOWLIST: Record<string, Record<string, Kind>> = {
   booking_started: BOOKING,
   booking_created: BOOKING,
   search_started: { queryLength: 'int' },
-  search_result_selected: { provider: 'string', kind: 'string', rank: 'int', queryLength: 'int', latencyMs: 'int' },
+  search_result_selected: { provider: 'provider', kind: 'searchKind', rank: 'int', queryLength: 'int', latencyMs: 'int' },
   search_empty: { queryLength: 'int' },
   ride_accepted: {},
-  ride_cancelled: { kind: 'bookingKind', status: 'string' },
+  ride_cancelled: { kind: 'bookingKind', status: 'cancelStatus' },
   push_permission: { state: 'pushState' },
-  push_opened: {},
+  push_opened: { kind: 'shortString' },
   frontend_error: { message: 'string', source: 'string', line: 'int' }
 }
 
@@ -40,6 +40,12 @@ const BOOKING_KINDS = ['NOW', 'SCHEDULED']
 const BOOKING_SOURCES = ['home', 'search', 'favorite', 'recent', 'rebook']
 const PUSH_STATES = ['granted', 'denied', 'default']
 const CANCEL_KINDS = ['passenger', 'driver']
+const PROVIDERS = ['SL', 'NOMINATIM', 'FAVORITE', 'RECENT']
+const SEARCH_KINDS = ['STOP', 'ADDRESS', 'POI', 'FAVORITE', 'RECENT']
+const CANCEL_STATUSES = ['by_passenger', 'by_driver']
+const MAX_SHORT = 40
+/** Anything that looks like a coordinate (3 digits max, separator, 4+ decimals). */
+const COORD_RE = /\d{1,3}[.,]\d{4,}/
 
 type QueuedEvent = { name: string; props: Record<string, string | number>; ts: string }
 
@@ -71,6 +77,14 @@ function valid(kind: Kind, v: unknown): v is string | number {
       return typeof v === 'string' && PUSH_STATES.includes(v)
     case 'cancelKind':
       return typeof v === 'string' && CANCEL_KINDS.includes(v)
+    case 'provider':
+      return typeof v === 'string' && PROVIDERS.includes(v)
+    case 'searchKind':
+      return typeof v === 'string' && SEARCH_KINDS.includes(v)
+    case 'cancelStatus':
+      return typeof v === 'string' && CANCEL_STATUSES.includes(v)
+    case 'shortString':
+      return typeof v === 'string' && v.length > 0 && v.length <= MAX_SHORT
   }
 }
 
@@ -82,6 +96,7 @@ export function sanitizeEvent(name: string, props: TelemetryProps | undefined): 
   for (const [key, value] of Object.entries(props ?? {})) {
     if (FORBIDDEN_KEY.test(key)) return null
     if (typeof value === 'number' && hasManyDecimals(value)) return null
+    if (typeof value === 'string' && COORD_RE.test(value)) return null
     const kind = allowed[key]
     if (!kind || !valid(kind, value)) continue
     out[key] = typeof value === 'string' && kind === 'string' ? value.slice(0, name === 'frontend_error' ? (key === 'message' ? MAX_MESSAGE : MAX_SOURCE) : MAX_STRING) : value
@@ -129,33 +144,51 @@ export function getBookingSource(): BookingSource {
   return bookingSource
 }
 
+async function post(token: string, batch: QueuedEvent[]): Promise<Response | null> {
+  try {
+    return await fetch(`${API_URL}/api/telemetry/events`, {
+      method: 'POST',
+      keepalive: true,
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ sessionId: getSessionId(), events: batch })
+    })
+  } catch {
+    return null
+  }
+}
+
 export async function flush(): Promise<void> {
   try {
     if (inFlight || queue.length === 0) return
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return
-    const auth = readStoredAuth()
+    let auth = readStoredAuth()
     if (!auth || auth.user?.approved === false) return
     inFlight = true
     try {
+      let refreshed = false
+      if (tokenExpiresWithin(auth.token, REFRESH_AHEAD_MS)) {
+        refreshed = true
+        if ((await refreshSession()) !== 'ok') return
+        auth = readStoredAuth()
+        if (!auth) return
+      }
       while (queue.length > 0) {
         const batch = queue.splice(0, MAX_BATCH)
-        let ok = false
-        let retry = false
-        try {
-          const res = await fetch(`${API_URL}/api/telemetry/events`, {
-            method: 'POST',
-            keepalive: true,
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
-            body: JSON.stringify({ sessionId: getSessionId(), events: batch })
-          })
-          ok = res.ok
-          retry = res.status >= 500
-        } catch {
-          retry = true
+        let res = await post(auth.token, batch)
+        if (res && res.status === 401 && !refreshed) {
+          refreshed = true
+          if ((await refreshSession()) === 'ok') {
+            const next = readStoredAuth()
+            if (next) {
+              auth = next
+              res = await post(auth.token, batch)
+            }
+          }
         }
-        if (!ok) {
-          if (retry) queue = [...batch, ...queue].slice(-MAX_QUEUE)
+        if (!res?.ok) {
+          // Keep events on network errors, 5xx and auth failures; drop on other 4xx (bad payload).
+          if (!res || res.status >= 500 || res.status === 401) queue = [...batch, ...queue].slice(-MAX_QUEUE)
           return
         }
       }
@@ -169,7 +202,7 @@ export async function flush(): Promise<void> {
 
 const URL_RE = /\b(?:https?|wss?|blob):\/\/[^\s'"<>)]+/gi
 export function stripUrls(text: string): string {
-  return text.replace(URL_RE, (u) => u.split(/[?#]/)[0])
+  return text.replace(URL_RE, (u) => u.split(/[?#]/)[0]).replace(/(\/[^\s?#"'<>]*)[?#][^\s"'<>]*/g, '$1')
 }
 
 export function trackFrontendError(message: unknown, source?: unknown, line?: unknown): void {

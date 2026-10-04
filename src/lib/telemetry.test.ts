@@ -16,8 +16,11 @@ import {
 
 const fetchMock = vi.fn()
 
+function jwt(expInSec: number) {
+  return `h.${btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + expInSec }))}.s`
+}
 function login(approved = true) {
-  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ token: 'tok', user: { approved } }))
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ token: jwt(3600), user: { approved } }))
 }
 function setOnline(v: boolean) {
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: v })
@@ -76,7 +79,7 @@ describe('flush', () => {
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('/api/telemetry/events')
     expect(init.keepalive).toBe(true)
-    expect(init.headers.Authorization).toBe('Bearer tok')
+    expect(init.headers.Authorization).toMatch(/^Bearer h\./)
     const body = JSON.parse(init.body)
     expect(body.sessionId).toBeTruthy()
     expect(body.events[0]).toMatchObject({ name: 'push_opened', props: {} })
@@ -127,16 +130,67 @@ describe('flush', () => {
       vi.advanceTimersByTime(FLUSH_INTERVAL_MS)
       expect(fetchMock).toHaveBeenCalledTimes(1)
       await vi.waitFor(() => expect(__queueSnapshot()).toHaveLength(0))
+      await new Promise((r) => setTimeout(r, 0))
       track('push_opened')
       setVisibility('hidden')
       expect(fetchMock).toHaveBeenCalledTimes(2)
       await vi.waitFor(() => expect(__queueSnapshot()).toHaveLength(0))
+      await new Promise((r) => setTimeout(r, 0))
       track('push_opened')
       window.dispatchEvent(new Event('pagehide'))
       expect(fetchMock).toHaveBeenCalledTimes(3)
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('privacy checks and enums', () => {
+  it('drops events with coordinate-like strings and strips relative URL queries', () => {
+    trackFrontendError('GET /api/places/reverse?lat=59.42351&lon=17.91234 failed')
+    expect(__queueSnapshot()[0].props.message).toBe('GET /api/places/reverse failed')
+    for (const m of ['Invalid LatLng object: (59.42351, NaN)', 'pos 59.42351', '59,42351 17,91234']) trackFrontendError(m)
+    expect(__queueSnapshot()).toHaveLength(1)
+  })
+  it('enforces provider/kind/status enums', () => {
+    expect(sanitizeEvent('search_result_selected', { provider: 'SL', kind: 'STOP' })).toEqual({ provider: 'SL', kind: 'STOP' })
+    expect(sanitizeEvent('search_result_selected', { provider: 'GOOGLE', kind: 'X' })).toEqual({})
+    expect(sanitizeEvent('ride_cancelled', { status: 'by_driver' })).toEqual({ status: 'by_driver' })
+    expect(sanitizeEvent('ride_cancelled', { status: 'nope' })).toEqual({})
+    expect(sanitizeEvent('push_opened', { kind: 'RIDE_ACCEPTED' })).toEqual({ kind: 'RIDE_ACCEPTED' })
+    expect(sanitizeEvent('push_opened', { kind: 'x'.repeat(41) })).toEqual({})
+  })
+})
+
+describe('flush with expired token', () => {
+  function expired() {
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ token: jwt(-100), user: { approved: true } }))
+  }
+  it('refreshes once before flushing', async () => {
+    expired()
+    track('push_opened')
+    const fresh = jwt(3600)
+    fetchMock.mockImplementation(async (url: string) =>
+      url.includes('/auth/refresh') ? { ok: true, status: 200, json: async () => ({ token: fresh }) } : { ok: true, status: 204 }
+    )
+    await flush()
+    const calls = fetchMock.mock.calls
+    expect(calls[0][0]).toContain('/api/auth/refresh')
+    expect(calls[1][1].headers.Authorization).toBe(`Bearer ${fresh}`)
+    expect(__queueSnapshot()).toHaveLength(0)
+  })
+  it('keeps events when refresh fails and does not loop on 401', async () => {
+    expired()
+    track('push_opened')
+    fetchMock.mockResolvedValue({ ok: false, status: 500, json: async () => ({}) })
+    await flush()
+    expect(__queueSnapshot()).toHaveLength(1)
+    login()
+    fetchMock.mockReset()
+    fetchMock.mockResolvedValue({ ok: false, status: 401, json: async () => ({}) })
+    await flush()
+    expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes('/api/telemetry')).length).toBe(1)
+    expect(__queueSnapshot()).toHaveLength(1)
   })
 })
 

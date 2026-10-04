@@ -566,12 +566,13 @@ export function BookingPage() {
   }
 
   function goHome() {
-    setBookingSource('home')
     if (!homePlace) {
+      setBookingSource('home')
       navigate('/app/platser?add=HOME')
       return
     }
     fillDestination({ label: homePlace.label, address: homePlace.formattedAddress || homePlace.address, lat: homePlace.lat, lon: homePlace.lon })
+    setBookingSource('home') // after fillDestination, which sets 'favorite'
     if (!draftRef.current.fromAddress.trim()) {
       if (gpsState !== 'pending') {
         onToast(t('home.needPickup'))
