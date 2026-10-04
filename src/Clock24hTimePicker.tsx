@@ -1,13 +1,10 @@
-import { useEffect, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { useOverlayOpen } from './components/ui/overlayRegistry'
 
 const CX = 120
 const CY = 120
 const R_OUT = 88
 const R_IN = 58
-/** Minute selection ring inner / outer radius (donut). */
-const R_MIN_IN = 38
-const R_MIN_OUT = 100
 
 type Mode = 'hour' | 'minute'
 
@@ -42,20 +39,51 @@ function hourDialPosition(h: number) {
   }
 }
 
-function minuteFromPointer(clientX: number, clientY: number, svg: SVGSVGElement): number | null {
-  const pt = svg.createSVGPoint()
-  pt.x = clientX
-  pt.y = clientY
-  const ctm = svg.getScreenCTM()
-  if (!ctm) return null
-  const loc = pt.matrixTransform(ctm.inverse())
+/** Pointer position in the clock's 240x240 viewBox coordinates (accounts for letterboxing). */
+function clockPoint(clientX: number, clientY: number, svg: SVGSVGElement): { x: number; y: number } | null {
+  const ctm = typeof svg.getScreenCTM === 'function' ? svg.getScreenCTM() : null
+  if (ctm && typeof svg.createSVGPoint === 'function') {
+    const pt = svg.createSVGPoint()
+    pt.x = clientX
+    pt.y = clientY
+    const loc = pt.matrixTransform(ctm.inverse())
+    return { x: loc.x, y: loc.y }
+  }
+  // Fallback (no SVG matrix support, e.g. jsdom): the viewBox is square and centred ("meet").
+  const rect = svg.getBoundingClientRect()
+  const side = Math.min(rect.width, rect.height)
+  if (!side) return null
+  const scale = 240 / side
+  const left = rect.left + (rect.width - side) / 2
+  const top = rect.top + (rect.height - side) / 2
+  return { x: (clientX - left) * scale, y: (clientY - top) * scale }
+}
+
+/** Angle in degrees clockwise from 12 o'clock, plus distance from the clock centre. */
+function polar(clientX: number, clientY: number, svg: SVGSVGElement): { deg: number; dist: number } | null {
+  const loc = clockPoint(clientX, clientY, svg)
+  if (!loc) return null
   const dx = loc.x - CX
   const dy = loc.y - CY
-  const dist = Math.hypot(dx, dy)
-  if (dist < R_MIN_IN || dist > R_MIN_OUT) return null
-  const deg = (Math.atan2(dy, dx) * 180) / Math.PI
-  const normalized = (deg + 90 + 360) % 360
-  return Math.round((normalized / 360) * 60) % 60
+  const deg = ((Math.atan2(dy, dx) * 180) / Math.PI + 90 + 360) % 360
+  return { deg, dist: Math.hypot(dx, dy) }
+}
+
+/** Ignore touches this close to the centre (the angle is meaningless there). */
+const DEAD_ZONE = 14
+
+function minuteFromPointer(clientX: number, clientY: number, svg: SVGSVGElement): number | null {
+  const p = polar(clientX, clientY, svg)
+  if (!p || p.dist < DEAD_ZONE) return null
+  return Math.round((p.deg / 360) * 60) % 60
+}
+
+/** Outer ring = 0..11, inner ring = 12..23 (matches the dial layout). Any distance is accepted so a drag can wander. */
+function hourFromPointer(clientX: number, clientY: number, svg: SVGSVGElement): number | null {
+  const p = polar(clientX, clientY, svg)
+  if (!p || p.dist < DEAD_ZONE) return null
+  const slot = Math.round(p.deg / 30) % 12
+  return p.dist < (R_OUT + R_IN) / 2 ? 12 + slot : slot
 }
 
 export function Clock24hTimePicker({
@@ -78,6 +106,7 @@ export function Clock24hTimePicker({
   const [keyboardMode, setKeyboardMode] = useState(false)
   const [kbdH, setKbdH] = useState('')
   const [kbdM, setKbdM] = useState('')
+  const draggingRef = useRef(false)
 
   useEffect(() => {
     if (open) {
@@ -101,15 +130,43 @@ export function Clock24hTimePicker({
 
   if (!open) return null
 
-  function handleHourPick(h: number) {
-    setHour(h)
-    setMode('minute')
+  /** Applies the pointer position to the value of the active dial (hour or minute). */
+  function applyPointer(e: ReactPointerEvent<SVGSVGElement>) {
+    if (mode === 'hour') {
+      const h = hourFromPointer(e.clientX, e.clientY, e.currentTarget)
+      if (h !== null) setHour(h)
+    } else {
+      const m = minuteFromPointer(e.clientX, e.clientY, e.currentTarget)
+      if (m !== null) setMinute(m)
+    }
   }
 
   function onClockPointerDown(e: ReactPointerEvent<SVGSVGElement>) {
-    if (mode !== 'minute') return
-    const m = minuteFromPointer(e.clientX, e.clientY, e.currentTarget)
-    if (m !== null) setMinute(m)
+    if (e.pointerType === 'mouse' && e.button !== 0) return
+    draggingRef.current = true
+    try {
+      e.currentTarget.setPointerCapture?.(e.pointerId) // keep receiving moves/up even if the finger leaves the dial
+    } catch {
+      /* not supported */
+    }
+    applyPointer(e)
+  }
+
+  function onClockPointerMove(e: ReactPointerEvent<SVGSVGElement>) {
+    if (!draggingRef.current) return
+    applyPointer(e)
+  }
+
+  function endDrag(e: ReactPointerEvent<SVGSVGElement>, finished: boolean) {
+    if (!draggingRef.current) return
+    draggingRef.current = false
+    try {
+      e.currentTarget.releasePointerCapture?.(e.pointerId)
+    } catch {
+      /* not supported */
+    }
+    // Lifting the finger on the hour dial moves on to the minutes; a cancelled gesture stays put.
+    if (finished && mode === 'hour') setMode('minute')
   }
 
   function confirm() {
@@ -167,7 +224,12 @@ export function Clock24hTimePicker({
             <svg
               className="mtp-clock"
               viewBox="0 0 240 240"
+              style={{ touchAction: 'none' }}
               onPointerDown={onClockPointerDown}
+              onPointerMove={onClockPointerMove}
+              onPointerUp={(e) => endDrag(e, true)}
+              onPointerCancel={(e) => endDrag(e, false)}
+              onContextMenu={(e) => e.preventDefault()}
             >
               <circle cx={CX} cy={CY} r={112} className="mtp-clock-face" />
 
@@ -182,10 +244,7 @@ export function Clock24hTimePicker({
                         cy={y}
                         r={active ? 22 : 20}
                         className={active ? 'mtp-hour-bubble mtp-hour-bubble-active' : 'mtp-hour-bubble'}
-                        onPointerDown={(e) => {
-                          e.stopPropagation()
-                          handleHourPick(h)
-                        }}
+                        pointerEvents="none"
                       />
                       <text
                         x={x}
